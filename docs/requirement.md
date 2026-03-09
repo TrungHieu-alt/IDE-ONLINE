@@ -33,7 +33,15 @@ Platform cho phép người dùng viết code online với nhiều ngôn ngữ l
 
 ---
 
-## 3. FUNCTIONAL REQUIREMENTS
+## 3. STAKEHOLDER
+
+| Stakeholder | Role | Responsibility |
+|-------------|------|----------------|
+| Project Supervisor | Project oversight | Định hướng mục tiêu dự án, review requirement document và đánh giá kết quả demo. |
+| Project Team | System development | Thiết kế, triển khai và tích hợp các thành phần của hệ thống như frontend, backend, realtime sync và code execution. |
+| End Users (Coder / Viewer) | Platform users | Sử dụng hệ thống để viết code, chạy chương trình và cung cấp feedback về trải nghiệm sử dụng. |
+
+## 4. FUNCTIONAL REQUIREMENTS
 
 | ID | Requirement | Description |
 |----|-------------|-------------|
@@ -50,7 +58,7 @@ Platform cho phép người dùng viết code online với nhiều ngôn ngữ l
 
 ---
 
-## 4. NON-FUNCTIONAL REQUIREMENTS
+## 5. NON-FUNCTIONAL REQUIREMENTS
 
 | ID | Requirement | Target |
 |----|-------------|--------|
@@ -65,7 +73,7 @@ Platform cho phép người dùng viết code online với nhiều ngôn ngữ l
 
 ---
 
-## 5. USER ROLES & PERMISSIONS
+## 6. USER ROLES & PERMISSIONS
 
 | Role | Register | Login | Create Question | Create Test Case | Submit Code | View Own Submissions | View All Submissions | Admin Dashboard |
 |------|----------|-------|-----------------|------------------|-------------|---------------------|----------------------|-----------------|
@@ -81,7 +89,7 @@ Platform cho phép người dùng viết code online với nhiều ngôn ngữ l
 
 ---
 
-## 6. TECHNOLOGY STACK
+## 7. TECHNOLOGY STACK
 
 | Layer | Technology | Reason |
 |-------|-----------|--------|
@@ -97,57 +105,6 @@ Platform cho phép người dùng viết code online với nhiều ngôn ngữ l
 
 ---
 
-## 7. DATABASE SCHEMA (High-Level)
-
-```
-users
-├── id (PK)
-├── email (UNIQUE)
-├── password_hash
-├── role (Admin/Coder/Viewer)
-├── created_at
-
-questions
-├── id (PK)
-├── title
-├── description
-├── created_by (FK: users.id)
-├── difficulty
-├── created_at
-├── updated_at
-
-test_cases
-├── id (PK)
-├── question_id (FK: questions.id)
-├── input
-├── expected_output
-├── is_hidden (TRUE/FALSE)
-├── created_at
-
-submissions
-├── id (PK)
-├── user_id (FK: users.id)
-├── question_id (FK: questions.id)
-├── language
-├── source_code
-├── status (Accepted/WA/TLE/RE/etc)
-├── stdout
-├── stderr
-├── execution_time (ms)
-├── memory (MB)
-├── created_at
-
-sessions (for realtime collaboration)
-├── id (PK)
-├── coder_id (FK: users.id)
-├── question_id (FK: questions.id)
-├── current_code
-├── status (ACTIVE/ENDED)
-├── created_at
-├── updated_at
-```
-
----
 
 ## 8. SYSTEM ARCHITECTURE
 
@@ -170,50 +127,18 @@ sessions (for realtime collaboration)
                  │
     ┌────────────┼────────────┐
     │            │            │
-┌───▼──┐    ┌───▼───┐    ┌──▼────────┐
-│Judge0│    │PostgreSQL   │Redis(opt) │
-│      │    │(DB)        │(Cache)    │
-└──────┘    └─────────────┘───────────┘
+┌───▼──┐    ┌────▼─────┐   ┌──▼────────┐
+│Judge0│    │PostgreSQL│   │Redis(opt) │
+│      │    │(DB)      │   │(Cache)    │
+└──────┘    └──────────┘    ───────────┘
 ```
 
----
-
-## 9. API ENDPOINTS (Summary)
-
-### Auth
-- `POST /auth/register` - Đăng ký
-- `POST /auth/login` - Đăng nhập
-- `POST /auth/logout` - Đăng xuất
-
-### Code Execution
-- `POST /submissions` - Submit code
-- `GET /submissions/:id` - Lấy chi tiết submission
-- `GET /submissions/user/:userId` - Lấy submission của user
-
-### Questions
-- `GET /questions` - Lấy danh sách câu hỏi
-- `GET /questions/:id` - Chi tiết câu hỏi
-- `POST /questions` (Admin only) - Tạo câu hỏi
-- `PUT /questions/:id` (Admin only) - Sửa câu hỏi
-- `DELETE /questions/:id` (Admin only) - Xóa câu hỏi
-
-### Test Cases
-- `POST /questions/:id/test-cases` (Admin only) - Tạo test case
-- `DELETE /test-cases/:id` (Admin only) - Xóa test case
-
-### WebSocket Events
-- `editor:sync` - Coder gõ code
-- `execution:start` - Bắt đầu chạy
-- `execution:complete` - Kết quả chạy
-
----
-
-## 10. KEY DESIGN DECISIONS
+## 9. KEY DESIGN DECISIONS
 
 | Decision | Rationale |
 |----------|-----------|
 | **Judge0 Selfhost** | Kiểm soát tài nguyên, isolation, cost-effective |
-| **WebSocket 1-way sync** | Simplify, chỉ cần Coder → Viewer, không cần conflict resolution |
+| **WebSocket 1-way sync** | Chỉ cần Coder → Viewer, không cần conflict resolution |
 | **JWT Auth** | Stateless, scalable, không cần session storage |
 | **PostgreSQL** | ACID compliance, relation data, transaction support |
 | **Docker Compose** | Dễ deploy, tất cả trong 1 package (Judge0 + app + DB) |
@@ -221,51 +146,41 @@ sessions (for realtime collaboration)
 
 ---
 
-## 11. CRITICAL QUESTIONS & ANSWERS
+## 10. RỦI RO (RISKS)
 
-| # | Question | Answer |
-|---|----------|--------|
-| 1 | **Isolation:** Code user A chạy `ls /` có thấy user B file? | Judge0 container riêng, filesystem tách biệt, auto cleanup |
-| 2 | **Infinite loop:** User submit `while(true){}` → sao? | Judge0 `cpu_time_limit=10s` → return TLE status |
-| 3 | **Realtime 100 chars/s:** Gửi 100 event/s? | Debounce client-side 300ms → batch changes, ~3-4 event/s |
-| 4 | **Judge0 crash:** Submission pending → xử lý? | Retry with exponential backoff, queue, error to user |
-| 5 | **History storage:** 1000 users × 50 submit/day = ? | DB metadata, file storage (S3/local) cho code content |
-| 6 | **20 users submit cùng:** Judge0 queue? | Config worker, max concurrent 5 → queue others, timeout 30s |
+### 10.1 Rủi ro về bảo mật
 
----
+| Rủi ro | Mức độ ảnh hưởng | Mô tả | Biện pháp giảm thiểu |
+|--------|-----------------|-------|----------------------|
+| Sandbox Escaping | Critical | User cố gắng thoát khỏi sandbox để truy cập hệ thống host | Sử dụng container isolation, seccomp, AppArmor, audit bảo mật định kỳ |
+| Tấn công mạng nội bộ | High | Code độc hại cố truy cập các service nội bộ trong mạng | Network isolation, chặn outbound request |
+| Tiêu thụ tài nguyên trái phép | High | User submit code để đào coin hoặc chạy vòng lặp tiêu tốn CPU | Giới hạn CPU, memory, time limit |
 
-## 12. CONSTRAINTS
+### 10.2 Rủi ro về hiệu suất & mở rộng
 
-| Constraint | Value |
-|-----------|-------|
-| **Max execution time** | 10 seconds |
-| **Max memory** | 256 MB |
-| **Max code length** | 64 KB |
-| **Max concurrent submissions** | 10 |
-| **Supported languages** | 9 (C, C++, JS, TS, Java, C#, Python, PHP, Dart) |
-| **Realtime sync latency** | < 1 second |
+| Rủi ro | Mức độ ảnh hưởng | Mô tả | Biện pháp giảm thiểu |
+|--------|-----------------|-------|----------------------|
+| Tắc nghẽn hàng đợi | High | Nhiều user submit code cùng lúc làm queue backlog | Queue system (Redis / RabbitMQ), autoscaling workers |
+| Đo lường thời gian không nhất quán | Medium | CPU quá tải khiến chương trình bị TLE không công bằng | Dedicated judge worker, CPU quota |
+| Chi phí hạ tầng tăng cao | Medium | Sandbox khởi tạo chậm hoặc không tối ưu | Container reuse, lightweight runtime |
 
----
+## 11. EDGE CASES
 
-## 13. ASSUMPTIONS
+| Edge Case | Mức độ ảnh hưởng | Biện pháp giảm thiểu |
+|-----------|-----------------|----------------------|
+| Output thừa hoặc thiếu 1 dấu cách / xuống dòng | Submission bị chấm sai | Trim whitespace hoặc sử dụng special judge |
+| Sai số rất nhỏ (floating point error) | Answer bị đánh sai | So sánh với epsilon (±10^-6) |
+| Code quá dài hoặc compile quá lâu | Làm nghẽn hệ thống chấm | Giới hạn code size và compile time |
 
-- Người dùng có connection ổn định
-- Judge0 available 99% uptime
-- User không cố gắng hack sandbox (trusted environment)
-- Code length < 64KB
-- Test case input/output không quá 10MB
+## 12. ASSUMPTIONS
 
----
-
-## 14. RISKS & MITIGATION
-
-| Risk | Impact | Mitigation |
-|------|--------|-----------|
-| Judge0 sandbox escape | Critical | Regular security audit, sandboxing best practices |
-| Realtime sync lag | Medium | Debounce client, optimize WebSocket |
-| Resource exhaustion | High | CPU/memory limit, queue system, rate limiting |
-| DB performance | Medium | Index optimization, caching, read replicas (future) |
-| Code storage overflow | Medium | Cleanup old submissions, compression |
+| Giả định | Mô tả |
+|---------|-------|
+| Stable Internet | Người dùng có kết nối internet ổn định |
+| Judge0 uptime | Judge0 available ~99% uptime |
+| Trusted environment | User không cố ý hack sandbox |
+| Code size limit | Code length < 64KB |
+| Testcase size | Input/Output ≤ 10MB |
 
 ---
 
@@ -278,34 +193,11 @@ sessions (for realtime collaboration)
 ✅ Isolation: Code user A không truy cập user B  
 ✅ 10 concurrent submissions không timeout  
 
----
 
-## 16. DELIVERABLES TIMELINE
-
-| Week | Deliverable | Status |
-|------|-------------|--------|
-| 1 | Requirement Doc + Database Design | ✅ |
-| 2 | API Spec + Architecture Diagram | ⏳ |
-| 3 | Frontend Setup + Editor Integration | ⏳ |
-| 4 | Backend API Implementation | ⏳ |
-| 5 | Judge0 Integration + Sandbox Testing | ⏳ |
-| 6 | Realtime Collaboration (WebSocket) | ⏳ |
-| 7 | Testing + Security Hardening | ⏳ |
-| 8 | Deployment + Documentation | ⏳ |
-
----
-
-## 17. REFERENCES
-
-- [Judge0 Documentation](https://judge0.com/#docs)
-- [Judge0 GitHub](https://github.com/judge0/judge0)
-- [Monaco Editor](https://microsoft.github.io/monaco-editor/)
-- [NestJS Documentation](https://docs.nestjs.com/)
-- [PostgreSQL Documentation](https://www.postgresql.org/docs/)
-- [Socket.io Documentation](https://socket.io/docs/)
 
 ---
 
 **Document Owner:** Project Team  
 **Last Updated:** March 2025  
 **Review Date:** TBD
+
