@@ -1,75 +1,102 @@
-# Edge Case Analysis - Focused
+# Edge Case & Risk Assessment
 ## Online Code Editor Platform
 
-**Phiên bản:** 2.0 (Condensed)  
-**Ngày:** Tháng 3 năm 2025  
-**Tổng số edge case:** 15 quan trọng nhất
+**Phiên bản:** 1.0  
+**Ngày:** Tháng 3 năm 2026  
+**Tài liệu:** Consolidated Edge Case Analysis + Risk Assessment
 
 ---
 
-## 📊 BẢNG TÓM TẮT (All Edge Cases)
+## 📑 MỤC LỤC
 
-| # | Tên Edge Case | Nhóm | Severity | Ảnh Hưởng | Giải Pháp |
-|---|---------------|------|----------|-----------|-----------|
-| 1 | Output có thừa whitespace | Execution | 🟡 HIGH | WA sai (42 vs 42 ) | Trim before compare |
-| 2 | Floating point precision | Execution | 🔴 CRITICAL | WA sai (0.3333 vs 0.3334) | Epsilon compare 1e-6 |
-| 3 | Output quá dài (>100MB) | Execution | 🔴 CRITICAL | Crash, timeout | Limit output size |
-| 4 | Timeout boundary (9.9s vs 10.1s) | Execution | 🟡 HIGH | Công bằng điểm | Verify chính xác 10s |
-| 5 | Realtime event out-of-order | Realtime | 🔴 CRITICAL | Viewer thấy sai code | Version-based ordering |
-| 6 | Duplicate event | Realtime | 🔴 CRITICAL | Code duplicate | Dedup by event ID |
-| 7 | Out-of-sync (checksum ≠) | Realtime | 🟡 HIGH | Inconsistent | Checksum verify + resync |
-| 8 | Network disconnect 30s | Realtime | 🟡 HIGH | Loss updates | Queue + full snapshot |
-| 9 | Concurrent submit (click 5x) | Database | 🔴 CRITICAL | Stats sai (1 thay vì 5) | Atomic transaction |
-| 10 | Judge0 callback race | Database | 🔴 CRITICAL | Duplicate/loss result | Idempotent handler |
-| 11 | JWT signature tampered | Auth | 🔴 CRITICAL | Auth bypass | Verify signature |
-| 12 | Viewer try to edit | Realtime | 🔴 CRITICAL | Security breach | Role check in backend |
-| 13 | Email verification link expired | Registration | 🟡 HIGH | Resend needed | 24h token + resend button |
-| 14 | Role change at runtime | Auth | 🟡 HIGH | Inconsistent | Check DB not just JWT |
-| 15 | Soft delete user → history | Database | 🟡 HIGH | Orphan data | Define clear policy |
+1. [Phần I: Edge Case Analysis](#phần-i-edge-case-analysis)
+   - [1.1 Bảng Tóm Tắt](#11-bảng-tóm-tắt)
+   - [1.2 Summary by Severity](#12-summary-by-severity)
+   - [1.3 Test Roadmap](#13-test-roadmap)
+   - [1.4 Chi Tiết 12 Edge Cases](#14-chi-tiết-12-edge-cases)
 
----
+2. [Phần II: Risk Assessment](#phần-ii-risk-assessment)
+   - [2.1 Bảng Tóm Tắt Risk](#21-bảng-tóm-tắt-risk)
+   - [2.2 CRITICAL Risks (5)](#22-critical-risks-5)
+   - [2.3 HIGH Risks (5)](#23-high-risks-5)
+   - [2.4 Risk Matrix](#24-risk-matrix)
 
-## 🔴 CRITICAL (6) - MUST TEST
-
-1. **#2: Floating Point Precision** → Physics/Math problem
-2. **#3: Output Quá Dài** → System crash
-3. **#5: Event Out-of-Order** → Realtime core feature
-4. **#6: Duplicate Event** → Data corruption
-5. **#9: Concurrent Submit Race** → Data inconsistency
-6. **#10: Judge0 Callback Race** → Duplicate/lost submission
-7. **#11: JWT Tampered** → Security breach
-8. **#12: Viewer Edit No Perm** → Security breach
+3. [Phần III: Alignment & Success Criteria](#phần-iii-alignment--success-criteria)
+   - [3.1 Risk ↔ Edge Case Mapping](#31-risk--edge-case-mapping)
+   - [3.2 Success Criteria](#32-success-criteria)
+   - [3.3 Mitigation Timeline](#33-mitigation-timeline)
 
 ---
 
-## 🟡 HIGH (7) - SHOULD TEST
+---
 
-1. **#1: Output Whitespace** → Wrong Answer incorrect
-2. **#4: Timeout Boundary** → Fairness in grading
-3. **#7: Out-of-Sync** → Realtime consistency
-4. **#8: Network Disconnect** → Reliability
-5. **#13: Email Link Expired** → Registration flow
-6. **#14: Role Change Runtime** → Permission consistency
-7. **#15: Soft Delete User** → Data policy
+# PHẦN I: EDGE CASE ANALYSIS
+
+## 1.1 Bảng Tóm Tắt
+
+| # | Tên Edge Case | Nhóm | Severity | Ảnh Hưởng | Test Priority |
+|---|---------------|------|----------|-----------|---------------|
+| 1 | Output có thừa whitespace | Execution | 🟡 HIGH | WA sai không công bằng | Tuần 1 |
+| 2 | Floating point precision | Execution | 🔴 CRITICAL | WA sai (bài khoa học) | Tuần 1 |
+| 3 | Output quá dài (>100MB) | Execution | 🔴 CRITICAL | Crash hệ thống | Tuần 1 |
+| 4 | Timeout boundary (9.9s vs 10.1s) | Execution | 🟡 HIGH | Công bằng điểm | Tuần 1 |
+| 5 | Event out-of-order | Realtime | 🔴 CRITICAL | Viewer thấy sai code | Tuần 1 |
+| 6 | Duplicate event | Realtime | 🔴 CRITICAL | Code duplicate | Tuần 1 |
+| 7 | Out-of-sync (checksum ≠) | Realtime | 🟡 HIGH | Code inconsistent | Tuần 1 |
+| 8 | Network disconnect 30s | Realtime | 🟡 HIGH | Loss updates | Tuần 2 |
+| 9 | Concurrent submit (click 5x) | Database | 🔴 CRITICAL | Stats sai | Tuần 1 |
+| 10 | Judge0 callback race | Database | 🔴 CRITICAL | Duplicate/lost submission | Tuần 1 |
+| 11 | JWT signature tampered | Auth | 🔴 CRITICAL | Auth bypass | Tuần 1 |
+| 12 | Viewer try to edit | Realtime | 🔴 CRITICAL | Security breach | Tuần 1 |
 
 ---
 
-## 🎯 PHẦN DETAIL: 15 Edge Cases
+## 1.2 Summary by Severity
+
+### 🔴 CRITICAL (8 cases)
+- #2: Floating point precision
+- #3: Output quá dài
+- #5: Event out-of-order
+- #6: Duplicate event
+- #9: Concurrent submit race
+- #10: Judge0 callback race
+- #11: JWT signature tampered
+- #12: Viewer edit no permission
+
+### 🟡 HIGH (4 cases)
+- #1: Output whitespace
+- #4: Timeout boundary
+- #7: Out-of-sync checksum
+- #8: Network disconnect
 
 ---
 
-## EXECUTION & JUDGE0 (4 cases)
+## 1.3 Test Roadmap
 
-### 1. Output có thừa whitespace
+### Tuần 1: CRITICAL (8 cases)
+- [ ] #2, #3 (Output validation)
+- [ ] #5, #6 (Realtime ordering & dedup)
+- [ ] #9, #10 (Database race condition)
+- [ ] #11, #12 (Security)
+
+### Tuần 2: HIGH (4 cases)
+- [ ] #1, #4 (Execution edge case)
+- [ ] #7, #8 (Realtime resilience)
+
+---
+
+## 1.4 Chi Tiết 12 Edge Cases
+
+### EXECUTION & JUDGE0 (4 cases)
+
+#### 1. Output có thừa whitespace
 **Vấn đề:** Expected "42", code output "42 " (thừa space)
 
 ```python
-# Code
-print(42)  # Output: "42\n"
-
+# Code output: "42\n"
 # Expected: "42"
 # Actual: "42 \n" (thừa space)
-# Result: WA ❌ (sai, nhưng không công bằng)
+# Result: WA ❌ (không công bằng)
 ```
 
 **Giải pháp:**
@@ -84,13 +111,13 @@ expect(normalizeOutput("42 \n")).toBe("42");
 
 ---
 
-### 2. Floating point precision (CRITICAL)
-**Vấn đề:** So sánh số thực có sai số
+#### 2. Floating point precision (CRITICAL)
+**Vấn đề:** Bài khoa học: 1/3 → expected "0.3333333333", code output "0.3333333334"
 
 ```python
-# Physics problem: calculate 1/3
+# Physics problem
 # Expected: 0.3333333333333333
-# Code output: 0.3333333334
+# Output: 0.3333333334
 # Result: WA ❌ (nhưng cơ bản đúng)
 ```
 
@@ -99,25 +126,31 @@ expect(normalizeOutput("42 \n")).toBe("42");
 function floatCompare(a, b, epsilon = 1e-6) {
   return Math.abs(a - b) < epsilon;
 }
-// Test
 expect(floatCompare(0.3333333334, 0.3333333333)).toBe(true);
 ```
 
-**Severity:** 🔴 CRITICAL (bài khoa học không test sẽ fail)
+**Test:**
+```javascript
+const expected = 0.3333333333;
+const output = 0.3333333334;
+expect(floatCompare(expected, output, 1e-6)).toBe(true);
+```
+
+**Severity:** 🔴 CRITICAL
 
 ---
 
-### 3. Output quá dài (CRITICAL)
-**Vấn đề:** Code in 1GB output → crash hệ thống
+#### 3. Output quá dài (>100MB) (CRITICAL)
+**Vấn đề:** Code print 1 tỷ dòng → crash hệ thống
 
 ```python
-for i in range(100000000):
-    print(i)  # Print 100 triệu dòng = GB size
+for i in range(1000000000):
+    print(i)  # Output = 1GB → crash
 ```
 
 **Giải pháp:**
 ```javascript
-const MAX_OUTPUT = 10 * 1024 * 1024;  // 10MB
+const MAX_OUTPUT = 10 * 1024 * 1024;  // 10MB limit
 if (stdout.length > MAX_OUTPUT) {
   return { status: "RE", message: "Output quá lớn" };
 }
@@ -125,7 +158,7 @@ if (stdout.length > MAX_OUTPUT) {
 
 **Test:**
 ```javascript
-const hugeCode = 'for i in range(1000000): print(i)';
+const hugeCode = 'for i in range(10000000): print(i)';
 const result = await submitCode(hugeCode);
 expect(result.status).toBe("RE");
 ```
@@ -134,53 +167,55 @@ expect(result.status).toBe("RE");
 
 ---
 
-### 4. Timeout boundary
+#### 4. Timeout boundary (9.9s vs 10.1s)
 **Vấn đề:** Code 9.9s accept, 10.1s TLE → công bằng?
 
 ```javascript
-// Config: timeout = 10 seconds
+Config: timeout = 10 seconds
 Code A: 9.9s → Accepted ✅
 Code B: 10.1s → TLE ❌
-
-// Test: verify boundary chính xác
+Code C: 10.05s → ? (borderline)
 ```
 
 **Giải pháp:**
 ```javascript
-// Config Judge0
-const timeLimit = 10000;  // millisecond, chính xác
+// Config Judge0 với millisecond precision
+const timeLimit = 10000;  // Chính xác 10 giây
 
-// Test: code chạy đúng 10s should pass
+// Verify boundary
+// Code chạy 9.9s: pass
+// Code chạy 10.1s: fail (TLE)
 ```
 
 **Severity:** 🟡 HIGH
 
 ---
 
-## REALTIME COLLABORATION (4 cases)
+### REALTIME COLLABORATION (4 cases)
 
-### 5. Event out-of-order (CRITICAL)
-**Vấn đề:** 3 event gửi A→B→C nhưng nhận C→A→B → sai
+#### 5. Event out-of-order (CRITICAL)
+**Vấn đề:** 3 event gửi A→B→C nhưng nhận C→A→B
 
 ```
-Coder type:
-  1. "def " (v=1, t=0ms)
-  2. "hello" (v=2, t=100ms)
-  3. "():" (v=3, t=200ms)
+Timeline:
+  Coder type: "d" (v1) → "de" (v2) → "def" (v3)
+  
+Network delay:
+  T10: receive v3 "def"
+  T20: receive v1 "d"
+  T30: receive v2 "de"
 
-Network delay → arrive: C, A, B
-
-Without fix: viewer see "():def hello():" ❌
-With fix: viewer see "def hello():" ✅
+Without fix: code = "defde" ❌
+With fix: code = "def" ✓
 ```
 
 **Giải pháp:**
 ```javascript
-// Version-based ordering
 let lastVersion = 0;
+
 function applyEvent(event) {
   if (event.version <= lastVersion) {
-    return;  // Discard old
+    return;  // Discard old version
   }
   lastVersion = event.version;
   updateCode(event.code);
@@ -190,38 +225,39 @@ function applyEvent(event) {
 **Test:**
 ```javascript
 const events = [
-  { v: 3, code: "():" },
-  { v: 1, code: "def " },
-  { v: 2, code: "hello" }
+  { v: 3, code: "def" },
+  { v: 1, code: "d" },
+  { v: 2, code: "de" }
 ];
+
 events.forEach(e => applyEvent(e));
-expect(finalCode).toBe("def hello():");
+expect(finalCode).toBe("def");  // Correct order
 ```
 
 **Severity:** 🔴 CRITICAL
 
 ---
 
-### 6. Duplicate event (CRITICAL)
-**Vấn đề:** Event gửi 2 lần → apply 2 lần → code duplicate
+#### 6. Duplicate event (CRITICAL)
+**Vấn đề:** Network retry → event gửi 2 lần
 
 ```
-Event A: { id: "uuid1", code: "x = 5" }
-Gửi lần 1 ✅
-Network fail, retry:
-Gửi lần 2 ✅ (duplicate!)
+Event: { id: "uuid1", code: "x = 5" }
+
+Send 1: ✅
+Network fail, client retry
+Send 2: ✅ (duplicate)
 
 Viewer: code = "x = 5x = 5" ❌
 ```
 
 **Giải pháp:**
 ```javascript
-// Dedup by event ID
 const eventSet = new Set();
 
 function applyEvent(event) {
   if (eventSet.has(event.id)) {
-    return;  // Already applied
+    return;  // Skip duplicate
   }
   eventSet.add(event.id);
   updateCode(event.code);
@@ -231,89 +267,90 @@ function applyEvent(event) {
 **Test:**
 ```javascript
 const event = { id: "uuid1", code: "x = 5" };
-applyEvent(event);  // Apply
-applyEvent(event);  // Apply again → skip
-expect(code).toBe("x = 5");  // Not duplicate
+applyEvent(event);      // Apply
+applyEvent(event);      // Skip duplicate
+expect(code).toBe("x = 5");  // Not "x = 5x = 5"
 ```
 
 **Severity:** 🔴 CRITICAL
 
 ---
 
-### 7. Out-of-sync (checksum mismatch)
-**Vấn đề:** Client code ≠ server code → reset
+#### 7. Out-of-sync (checksum mismatch)
+**Vấn đề:** Sau 100 events, client code ≠ server code
 
 ```
 Coder local: "abc"
 Server state: "abd" (miss 1 event)
 
-Client checksum: hash("abc") = 0xabc
-Server checksum: hash("abd") = 0xabd
-→ Mismatch! Request full snapshot
+Checksum:
+  Client: hash("abc") = 0xabc
+  Server: hash("abd") = 0xabd
+  → Mismatch!
 ```
 
 **Giải pháp:**
 ```javascript
-// Client: checksum mỗi 10s
+// Client: verify checksum mỗi 10s
 setInterval(async () => {
-  const localChecksum = hash(localCode);
+  const clientChecksum = hash(localCode);
   const serverChecksum = await api.getChecksum();
   
-  if (localChecksum !== serverChecksum) {
+  if (clientChecksum !== serverChecksum) {
     const fullCode = await api.getFullSnapshot();
-    localCode = fullCode;  // Reset
+    localCode = fullCode;  // Resync
   }
 }, 10000);
 ```
 
 **Test:**
 ```javascript
-// Simulate mismatch
-clientChecksum = hash("abc");
-serverChecksum = hash("abd");
-expect(clientChecksum).not.toBe(serverChecksum);
-// Trigger resync → code update to "abd"
+const clientCode = "abc";
+const serverCode = "abd";
+
+expect(hash(clientCode)).not.toBe(hash(serverCode));
+
+await viewer.requestFullSnapshot();
+expect(viewer.code).toBe(serverCode);
 ```
 
 **Severity:** 🟡 HIGH
 
 ---
 
-### 8. Network disconnect & reconnect
-**Vấn đề:** Viewer mất mạng 30s → reconnect → cần gì?
+#### 8. Network disconnect & reconnect
+**Vấn đề:** Viewer mất mạng 30s → reconnect → cần queue hay snapshot?
 
 ```
-Viewer connected: t=0
-Viewer disconnect: t=10s
-Server queue events 10-40s: 30 events
-Viewer reconnect: t=40s
-→ Send 30 events or full snapshot?
+Timeline:
+  T0: Viewer connected
+  T10: Viewer disconnect (network fail)
+  T10-40: Server queue 30 events
+  T40: Viewer reconnect
+  
+→ Send 30 events atau full snapshot?
 ```
 
 **Giải pháp:**
 ```javascript
 const MAX_QUEUE = 100;
 
-// Viewer disconnect
-clearConnection();
-
-// Server queue events
-queueEvent(event);  // max 100
-
-// Viewer reconnect
-if (missedEvents < MAX_QUEUE) {
-  sendMissedEvents();  // Send all 30
+// On reconnect
+if (missedEvents.length < MAX_QUEUE) {
+  await viewer.sendMissedEvents(missedEvents);
 } else {
-  sendFullSnapshot();  // Send full code
+  await viewer.sendFullSnapshot();
 }
 ```
 
 **Test:**
 ```javascript
-// Disconnect 30s, miss 50 events
+viewer.disconnect();
 const missedCount = 50;
+
+viewer.reconnect();
 if (missedCount < 100) {
-  await viewer.waitForMissedEvents(50);
+  await viewer.waitForMissedEvents();
   expect(viewer.code).toBe(expectedCode);
 }
 ```
@@ -322,30 +359,34 @@ if (missedCount < 100) {
 
 ---
 
-## DATABASE & CONCURRENCY (2 cases)
+### DATABASE & CONCURRENCY (2 cases)
 
-### 9. Concurrent submit race (CRITICAL)
-**Vấn đề:** User click Run 5 lần nhanh → stats sai
+#### 9. Concurrent submit race condition (CRITICAL)
+**Vấn đề:** User click Run 5 lần nhanh → stats = 1 (thay vì 5)
 
 ```
-User click Run (5x) → 5 request cùng lúc
-→ 5 INSERT submission
-→ 5 UPDATE user.total_submit
-→ Race condition: total_submit = 1 (thay vì 5)
+Race condition:
+  T1: SELECT total_submit = 0
+  T2: SELECT total_submit = 0
+  T3: SELECT total_submit = 0
+  T1: UPDATE total_submit = 0 + 1 = 1
+  T2: UPDATE total_submit = 0 + 1 = 1 (overwrite!)
+  T3: UPDATE total_submit = 0 + 1 = 1 (overwrite!)
+  
+Final: total_submit = 1 ❌ (should be 3)
 ```
 
 **Giải pháp:**
 ```sql
--- GOOD: Atomic transaction
-BEGIN;
-  INSERT INTO submissions (user_id, code, status)
-  VALUES (1, '...', 'PENDING');
-  
-  UPDATE users SET total_submit = total_submit + 1
-  WHERE id = 1;
-COMMIT;
+-- GOOD: Atomic increment
+UPDATE users SET total_submit = total_submit + 1 
+WHERE id = ?;
 
--- All or nothing
+-- GOOD: Transaction
+BEGIN;
+  INSERT INTO submissions (...);
+  UPDATE users SET total_submit = total_submit + 1;
+COMMIT;
 ```
 
 **Test:**
@@ -354,40 +395,40 @@ const promises = Array(5).fill(null).map(() => submitCode());
 await Promise.all(promises);
 
 const user = await db.users.findOne(userId);
-expect(user.total_submit).toBe(5);  // Not 1
+expect(user.total_submit).toBe(5);  // Not 1!
 ```
 
 **Severity:** 🔴 CRITICAL
 
 ---
 
-### 10. Judge0 callback race (CRITICAL)
-**Vấn đề:** Callback arrive trước DB insert hoàn tất → duplicate?
+#### 10. Judge0 callback race condition (CRITICAL)
+**Vấn đề:** Callback arrive trước DB insert hoàn tất → duplicate submission
 
 ```
-Thread 1: INSERT INTO submissions (status='PENDING')
-  - Halfway through
+Thread 1: INSERT submission (pending)
+  ├─ Halfway through insert
+  └─ Pause
 
-Thread 2 (callback): SELECT submission (NOT FOUND!)
-  - Insert duplicate? Or fail?
+Judge0 callback: SELECT submission WHERE token=? (NOT FOUND!)
+  ├─ INSERT new submission (thinking it's new)
+  └─ ❌ Duplicate!
 
-Thread 1: Finish insert → submission.id = 123
-Thread 2: Insert → submission.id = 124 ❌ DUPLICATE!
+Thread 1: Resume, finish insert
+Result: 2 submission with same token!
 ```
 
 **Giải pháp:**
 ```javascript
-// Callback handler: check submission exists
+// GOOD: Idempotent handler
 async function handleCallback(token, result) {
   let submission = await db.submissions.findOne({ token });
   
   if (!submission) {
-    // Not exist yet, queue for retry
-    await queue.push({ token, result });
-    return;
+    await callbackQueue.push({ token, result });
+    return;  // Don't insert duplicate
   }
   
-  // Update existing
   submission.status = result.status;
   submission.stdout = result.stdout;
   await submission.save();
@@ -396,42 +437,37 @@ async function handleCallback(token, result) {
 
 **Test:**
 ```javascript
-// Simulate callback race
-const submitPromise = submitCode();
+const submitPromise = submitCode();  // Don't await
 const callbackPromise = judgeCallback({ token, result });
 
 await Promise.all([submitPromise, callbackPromise]);
 
-// Verify: only 1 submission exists
-const count = await db.submissions.count();
-expect(count).toBe(1);
+const count = await db.submissions.count({ token });
+expect(count).toBe(1);  // Not 2!
 ```
 
 **Severity:** 🔴 CRITICAL
 
 ---
 
-## AUTHENTICATION & RBAC (3 cases)
+### AUTHENTICATION & SECURITY (2 cases)
 
-### 11. JWT signature tampered (CRITICAL)
-**Vấn đề:** User modify JWT → signature mismatch → reject
+#### 11. JWT signature tampered (CRITICAL)
+**Vấn đề:** Attacker modify JWT payload → signature invalid
 
 ```
-Original JWT: eyJhbGc...abc123
-User modify role: "Coder" → "Admin"
-→ New JWT: eyJhbGc...xyz789
-→ Signature invalid (không match secret)
-→ Return 401
+Original JWT: eyJhbGc...abc123xyz789
+Attacker: Modify role "Coder" → "Admin"
+New JWT: eyJhbGc...xyz789abc123 (signature wrong!)
+Backend: Verify signature → FAIL → 401
 ```
 
 **Giải pháp:**
 ```javascript
-// Always verify JWT signature
+// GOOD: Always verify signature
 try {
   const decoded = jwt.verify(token, secret);
-  // If success → token valid
 } catch (err) {
-  // Signature invalid → 401
   return res.status(401).json({ error: "Invalid token" });
 }
 ```
@@ -448,19 +484,21 @@ expect(() => jwt.verify(tampered, secret)).toThrow();
 
 ---
 
-### 12. Viewer try to edit (CRITICAL)
-**Vấn đề:** Viewer gửi edit event → backend allow? → breach
+#### 12. Viewer try to edit (CRITICAL)
+**Vấn đề:** Viewer gửi edit event → backend phải chặn
 
 ```
-Viewer: { role: "Viewer", socket connected }
+Viewer: { role: "Viewer" }
 Try emit: { action: "edit", code: "..." }
-→ Backend: allow or reject?
-→ If allow → viewer modified code ❌ BREACH!
+
+Backend:
+  ❌ BAD: allow (viewer modified code)
+  ✅ GOOD: reject (only Coder can edit)
 ```
 
 **Giải pháp:**
 ```javascript
-// Backend: check role before allow edit
+// GOOD: Check role before apply
 socket.on("edit", (event) => {
   const user = getUser(socket.id);
   
@@ -469,7 +507,6 @@ socket.on("edit", (event) => {
     return;
   }
   
-  // Allow only Coder
   broadcastUpdate(event);
 });
 ```
@@ -478,151 +515,352 @@ socket.on("edit", (event) => {
 ```javascript
 const viewer = { role: "Viewer" };
 socket.emit("edit", { code: "..." });
-// Should receive error, not apply
-expect(viewerSocket.hasError()).toBe(true);
+
+const error = await viewer.waitForError();
+expect(error.message).toBe("Unauthorized");
+expect(viewer.code).toBe(originalCode);
 ```
 
 **Severity:** 🔴 CRITICAL
 
 ---
 
-### 14. Role change at runtime
-**Vấn đề:** Admin downgrade role → old JWT still admin
+---
 
-```
-User JWT: { user_id: 5, role: "Admin" }
-Admin: UPDATE users SET role='Viewer' WHERE id=5
+# PHẦN II: RISK ASSESSMENT
 
-User with old JWT:
-→ Try create question
-→ JWT says "Admin" ✅
-→ But DB has role = "Viewer" ❌
-→ Inconsistent!
-```
+## 2.1 Bảng Tóm Tắt Risk
 
-**Giải pháp:**
-```javascript
-// Check role từ DB, not just JWT
-async function canCreateQuestion(userId) {
-  const user = await db.users.findOne(userId);
-  return user.role === "Admin";
-}
-```
-
-**Test:**
-```javascript
-// Before: Admin can create question
-await user.createQuestion({ ... });
-
-// Admin downgrade
-await admin.updateRole(userId, "Viewer");
-
-// After: should fail even with old JWT
-expect(async () => await user.createQuestion({ ... })).rejects();
-```
-
-**Severity:** 🟡 HIGH
+| # | Rủi Ro | Edge Case Liên Quan | Mức Độ | Ảnh Hưởng | Biện Pháp Giảm Thiểu |
+|---|--------|-------------------|--------|----------|----------------------|
+| 1 | Sandbox Escape | - | 🔴 CRITICAL | Hacker access host system | Container isolation, seccomp, audit |
+| 2 | Privilege Escalation (Auth) | #11 | 🔴 CRITICAL | Coder become Admin | JWT verify signature, DB role check |
+| 3 | Concurrent Insert Race | #9 | 🔴 CRITICAL | User stats inconsistent | Atomic transaction |
+| 4 | Judge0 Callback Race | #10 | 🔴 CRITICAL | Duplicate/lost submission | Idempotent handler |
+| 5 | Realtime Data Corruption | #5, #6, #7 | 🔴 CRITICAL | Viewer see wrong code | Event version + dedup |
+| 6 | Queue Backlog | - | 🟡 HIGH | Submission timeout, poor UX | Queue system, worker pool |
+| 7 | Judge0 Down (Availability) | - | 🟡 HIGH | System can't grade code | Retry policy, circuit breaker, fallback |
+| 8 | Network Attack (DDoS) | - | 🟡 HIGH | Service unavailable | Rate limiting, HTTPS, WAF |
+| 9 | Data Leak (Hidden Test) | - | 🟡 HIGH | Coder see expected output | API DTO sanitization, separate endpoint |
+| 10 | Viewer Edit No Permission | #12 | 🟡 HIGH | Data corruption, security | RBAC check in backend |
 
 ---
 
-## REGISTRATION (1 case)
+## 2.2 CRITICAL RISKS (5)
 
-### 13. Email verification link expired
-**Vấn đề:** User register → link sau 24h → expired
+### Risk 1: Sandbox Escape
+**Ảnh hưởng:** 🔴 CRITICAL - Hacker access host system, data breach
 
-```
-Register: t=0, send link (exp = 24h)
-User click link: t=25h
-→ Token expired
-→ Server: "Link hết hạn"
-→ User: resend email
-```
+**Biện pháp:**
+- ✅ Docker container isolation
+- ✅ Seccomp profile (block fork, execve, network)
+- ✅ AppArmor policy
+- ✅ Read-only filesystem
+- ✅ Regular security audit
 
-**Giải pháp:**
+**Confidence:** 🟢 HIGH (Judge0 already handle)
+
+---
+
+### Risk 2: Privilege Escalation (Auth) ↔ Edge Case #11
+**Ảnh hưởng:** 🔴 CRITICAL - Coder become Admin
+
+**Biện pháp:**
+- ✅ JWT signature verification
+- ✅ Check role từ DATABASE (not just JWT)
+- ✅ Add `iat` claim, check against role change
+- ✅ Short-lived token (1h) + refresh token
+
+**Test:**
 ```javascript
-// Token: 24 hour expiration
-const token = jwt.sign(
-  { email, type: "verify" },
-  secret,
-  { expiresIn: '24h' }
-);
+const token = jwt.sign({ role: "Coder" }, secret);
+const tampered = jwt.sign({ role: "Admin" }, wrongSecret);
+expect(() => jwt.verify(tampered, secret)).toThrow();
 
-// Verify endpoint
-app.get('/verify/:token', (req, res) => {
-  try {
-    const decoded = jwt.verify(req.params.token, secret);
-    // Valid, activate account
-  } catch (err) {
-    // Expired → error
-    return res.json({ error: "Link expired" });
+const dbRole = await db.users.findOne(5).role;
+expect(dbRole).toBe("Coder");
+```
+
+**Confidence:** 🟢 HIGH
+
+---
+
+### Risk 3: Concurrent Insert Race ↔ Edge Case #9
+**Ảnh hưởng:** 🔴 CRITICAL - User stats inconsistent
+
+**Biện pháp:**
+- ✅ Atomic transaction
+- ✅ Database ATOMIC INCREMENT
+- ✅ Sequence/counter
+
+**Code:**
+```sql
+UPDATE users SET total_submit = total_submit + 1 WHERE id = ?;
+
+BEGIN;
+  INSERT INTO submissions (...);
+  UPDATE users SET total_submit = total_submit + 1;
+COMMIT;
+```
+
+**Confidence:** 🟢 HIGH
+
+---
+
+### Risk 4: Judge0 Callback Race ↔ Edge Case #10
+**Ảnh hưởng:** 🔴 CRITICAL - Duplicate/lost submission
+
+**Biện pháp:**
+- ✅ Idempotent callback handler
+- ✅ Unique constraint on token
+- ✅ Queue for retry if not found
+
+**Code:**
+```javascript
+async function handleCallback(token, result) {
+  let submission = await db.submissions.findOne({ token });
+  
+  if (!submission) {
+    await callbackQueue.push({ token, result });
+    return;
   }
+  
+  submission.status = result.status;
+  await submission.save();
+}
+```
+
+**Confidence:** 🟡 MEDIUM
+
+---
+
+### Risk 5: Realtime Data Corruption ↔ Edge Case #5, #6, #7
+**Ảnh hưởng:** 🔴 CRITICAL - Viewer see wrong code
+
+**Biện pháp:**
+- ✅ Version-based ordering
+- ✅ Dedup by event ID
+- ✅ Checksum verification
+- ✅ Out-of-sync recovery
+
+**Confidence:** 🟢 HIGH
+
+---
+
+## 2.3 HIGH RISKS (5)
+
+### Risk 6: Queue Backlog
+**Ảnh hưởng:** 🟡 HIGH - Submission timeout, poor UX
+
+**Biện pháp:**
+- ✅ Queue system (Redis, RabbitMQ)
+- ✅ Worker pool (auto-scale)
+- ✅ Queue depth limit (max 100)
+- ✅ Monitor + alert
+
+**Implementation:**
+```javascript
+const queueDepth = await queue.length();
+if (queueDepth > 100) {
+  return res.status(503).json({ error: "System overload" });
+}
+await queue.push({ user_id, code, language });
+```
+
+**Confidence:** 🟢 HIGH
+
+---
+
+### Risk 7: Judge0 Down (Availability)
+**Ảnh hưởng:** 🟡 HIGH - System can't grade code
+
+**Biện pháp:**
+- ✅ Retry policy (exponential backoff: 1s, 2s, 4s, max 3x)
+- ✅ Circuit breaker
+- ✅ Health check (ping every 30s)
+- ✅ Graceful degradation
+- ✅ Queue for async retry
+
+**Confidence:** 🟢 HIGH
+
+---
+
+### Risk 8: Network Attack (DDoS)
+**Ảnh hưởng:** 🟡 HIGH - Service unavailable
+
+**Biện pháp:**
+- ✅ Rate limiting (5 attempt/min per IP)
+- ✅ HTTPS only
+- ✅ WAF (Cloudflare, AWS WAF)
+- ✅ CORS policy
+- ✅ Bot detection (CAPTCHA)
+
+**Code:**
+```javascript
+const loginLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 5,
+  message: "Too many login attempt"
 });
+app.post('/login', loginLimiter, loginController);
 ```
 
-**Test:**
-```javascript
-const token = generateVerifyToken(24 * 60 * 60);  // 24h
-await sleep(25 * 60 * 60 * 1000);  // Wait 25h
-const result = await verify(token);
-expect(result.error).toBe("Link expired");
-```
-
-**Severity:** 🟡 HIGH
+**Confidence:** 🟢 HIGH
 
 ---
 
-## GENERAL DATA (1 case)
+### Risk 9: Data Leak (Hidden Test Case)
+**Ảnh hưởng:** 🟡 HIGH - Coder see expected output
 
-### 15. Soft delete user → history orphan
-**Vấn đề:** Delete user → old submissions orphan atau hidden?
+**Biện pháp:**
+- ✅ Separate DTO for Coder vs Admin
+- ✅ API endpoint separate
+- ✅ Compare server-side only
 
-```
-User: id=1, deleted_at=null
-User submit: submission.user_id=1
-
-Admin soft delete: UPDATE users SET deleted_at=NOW()
-
-Query submissions:
-- Direct query: SELECT * FROM submissions WHERE user_id=1 → Found ✅
-- With join: SELECT * FROM users JOIN submissions
-  WHERE users.deleted_at IS NULL → User hidden, submission orphan ❌
-```
-
-**Giải pháp:**
+**Code:**
 ```javascript
-// Define policy clearly:
-// Option A: Hide submissions of deleted user
-// Option B: Keep submissions under "Deleted User" account
+if (user.role === "Coder") {
+  // Return without expected_output
+  const dto = testCases.map(tc => ({
+    id: tc.id,
+    input: tc.input
+  }));
+  return res.json(dto);
+}
 
-// Option A (recommend)
-async function getUserSubmissions(userId) {
-  const submissions = await db.submissions.find({ user_id: userId });
-  const user = await db.users.findOne(userId);
-  
-  // Filter if user deleted
-  if (user.deleted_at) {
-    return [];  // Hide
-  }
-  
-  return submissions;
+// Compare server-side
+for (const tc of testCases) {
+  const output = executeCode(submission.code, tc.input);
+  if (output !== tc.expected_output) return "WA";
 }
 ```
 
-**Test:**
-```javascript
-// Before delete
-const subs = await getSubmissions(userId);
-expect(subs.length).toBe(5);
-
-// Admin delete
-await deleteUser(userId);
-
-// After delete
-const subsAfter = await getSubmissions(userId);
-expect(subsAfter.length).toBe(0);  // Or keep, define behavior
-```
-
-**Severity:** 🟡 HIGH
-
+**Confidence:** 🟢 HIGH
 
 ---
+
+### Risk 10: Viewer Edit No Permission ↔ Edge Case #12
+**Ảnh hưởng:** 🟡 HIGH - Data corruption, security
+
+**Biện pháp:**
+- ✅ RBAC check in backend
+- ✅ Role validation per action
+
+**Confidence:** 🟢 HIGH
+
+---
+
+## 2.4 Risk Matrix
+
+```
+        LOW     MEDIUM     HIGH      CRITICAL
+LIKELY   -        -       #6,#8     #1,#2,#3,#4,#5
+                         #7,#9,#10
+
+POSSIBLE -         -        -         -
+
+RARE     -         -        -         -
+```
+
+---
+
+---
+
+# PHẦN III: ALIGNMENT & SUCCESS CRITERIA
+
+## 3.1 Risk ↔ Edge Case Mapping
+
+| Risk | Edge Case | Link | Mitigation |
+|------|-----------|------|-----------|
+| #2: Privilege Escalation | #11: JWT tamper | Auth bypass | JWT verify + DB check |
+| #3: Concurrent race | #9: Concurrent submit | Stats sai | Atomic transaction |
+| #4: Callback race | #10: Judge0 callback | Duplicate | Idempotent handler |
+| #5: Realtime corruption | #5, #6, #7: Event order, dedup, sync | Wrong code | Version + dedup |
+| #10: Viewer edit | #12: Viewer try edit | Breach | Role check |
+
+**Các risk không có Edge Case cụ thể** → Covered by integration/security test:
+- Risk #1 (Sandbox) → Security audit
+- Risk #6 (Queue) → Load test
+- Risk #7 (Judge0 down) → Reliability test
+- Risk #8 (DDoS) → Network security test
+- Risk #9 (Data leak) → API test
+
+---
+
+## 3.2 Success Criteria
+
+### Before Development
+- [ ] Understand all 12 edge cases
+- [ ] Understand all 10 risks
+- [ ] Understand mitigation strategies
+
+### During Development
+- [ ] Implement mitigation for all CRITICAL (8 edge case + 5 risk)
+- [ ] Implement mitigation for HIGH (4 edge case + 5 risk)
+- [ ] Write unit tests for all edge cases
+
+### Before Production
+- [ ] Sandbox escape prevented (security audit pass)
+- [ ] Privilege escalation prevented (JWT + DB check)
+- [ ] Race condition handled (atomic + idempotent)
+- [ ] Data integrity maintained (version + dedup)
+- [ ] Service resilient (retry + circuit breaker + health check)
+- [ ] Security hardened (rate limit + HTTPS + WAF)
+- [ ] Performance acceptable (indexing + caching)
+
+### Go-Live Checklist
+- [ ] All 12 edge cases tested & pass
+- [ ] All 10 risks mitigated & verified
+- [ ] No CRITICAL/HIGH severity bugs
+- [ ] Performance SLA met (< 500ms API, < 1s realtime)
+- [ ] Security audit passed
+- [ ] Load test passed (20 concurrent submission)
+
+---
+
+## 3.3 Mitigation Timeline
+
+### Ngay từ đầu (Development Phase)
+- ✅ #2: JWT verify + DB role check
+- ✅ #3: Atomic transaction for submit
+- ✅ #4: Idempotent callback handler
+- ✅ #5: Version-based event ordering
+- ✅ #5, #6: Dedup & checksum
+- ✅ #11, #12: RBAC enforcement
+
+### Before Production
+- ✅ #1: Sandbox security audit
+- ✅ #7: Health check + retry policy
+- ✅ #9: API DTO sanitization
+
+### In Production (Ongoing)
+- ✅ #6: Monitor queue depth, auto-scale
+- ✅ #8: Rate limiting, WAF, CAPTCHA
+- ✅ #10: Database monitoring + optimization
+
+---
+
+## 📊 SUMMARY
+
+| Aspect | CRITICAL | HIGH | Total |
+|--------|----------|------|-------|
+| **Edge Cases** | 8 | 4 | 12 |
+| **Risks** | 5 | 5 | 10 |
+| **Test Priority** | Tuần 1 | Tuần 2 | 2 weeks |
+| **Complexity** | Moderate | Low | ✅ Manageable |
+
+---
+
+## ✅ HOW TO USE THIS DOCUMENT
+
+1. **For Planning:** Review Risk Matrix + Timeline
+2. **For Development:** Follow Mitigation Timeline + Implement fixes
+3. **For Testing:** Use 12 Edge Cases as test cases
+4. **For Release:** Check Success Criteria before go-live
+5. **For Monitoring:** Track Risks + Edge Cases in production
+
+---
+
+**Document Status:** ✅ Ready to Use  
+**Last Updated:** March 2026  
+**Next Review:** After sprint planning
