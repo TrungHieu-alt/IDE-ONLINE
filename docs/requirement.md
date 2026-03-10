@@ -172,44 +172,6 @@ Platform cho phép người dùng viết code online với nhiều ngôn ngữ l
 
 ---
 
-## 10. RỦI RO (RISKS)
-
-### 10.1 Rủi ro về bảo mật
-
-| Rủi ro | Mức độ ảnh hưởng | Mô tả | Biện pháp giảm thiểu |
-|--------|-----------------|-------|----------------------|
-| Sandbox Escaping | Critical | User cố gắng thoát khỏi sandbox để truy cập hệ thống host | Sử dụng container isolation, seccomp, AppArmor, audit bảo mật định kỳ |
-| Tấn công mạng nội bộ | High | Code độc hại cố truy cập các service nội bộ trong mạng | Network isolation, chặn outbound request |
-| Tiêu thụ tài nguyên trái phép | High | User submit code để đào coin hoặc chạy vòng lặp tiêu tốn CPU | Giới hạn CPU, memory, time limit |
-
-### 10.2 Rủi ro về hiệu suất & mở rộng
-
-| Rủi ro | Mức độ ảnh hưởng | Mô tả | Biện pháp giảm thiểu |
-|--------|-----------------|-------|----------------------|
-| Tắc nghẽn hàng đợi | High | Nhiều user submit code cùng lúc làm queue backlog | Queue system (Redis / RabbitMQ), autoscaling workers |
-| Đo lường thời gian không nhất quán | Medium | CPU quá tải khiến chương trình bị `TIME_LIMIT_EXCEEDED` không công bằng | Dedicated judge worker, CPU quota |
-| Chi phí hạ tầng tăng cao | Medium | Sandbox khởi tạo chậm hoặc không tối ưu | Container reuse, lightweight runtime |
-
-## 11. EDGE CASES
-
-| Edge Case | Mức độ ảnh hưởng | Biện pháp giảm thiểu |
-|-----------|-----------------|----------------------|
-| Output thừa hoặc thiếu 1 dấu cách / xuống dòng | Submission bị chấm sai | Trim whitespace hoặc sử dụng special judge |
-| Sai số rất nhỏ (floating point error) | Answer bị đánh sai | So sánh với epsilon (±10^-6) |
-| Code quá dài hoặc compile quá lâu | Làm nghẽn hệ thống chấm | Giới hạn code size và compile time |
-
-## 12. ASSUMPTIONS
-
-| Giả định | Mô tả |
-|---------|-------|
-| Stable Internet | Người dùng có kết nối internet ổn định |
-| Judge0 uptime | Judge0 available ~99% uptime |
-| Trusted environment | User không cố ý hack sandbox |
-| Code size limit | Code length <= 1MB |
-| Testcase size | Input/Output <= 10,000 chars |
-
----
-
 ## 15. SUCCESS CRITERIA
 
 ✅ User đăng ký, login, chọn câu hỏi  
@@ -226,6 +188,7 @@ Platform cho phép người dùng viết code online với nhiều ngôn ngữ l
 **Document Owner:** Project Team  
 **Last Updated:** March 2026  
 **Review Date:** TBD
+
 
 
 
