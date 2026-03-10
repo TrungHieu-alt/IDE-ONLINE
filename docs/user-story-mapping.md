@@ -89,39 +89,14 @@ Login → Create Question → Add Test Cases → Publish Question → Monitor Su
 
 ## 6. Simplified Story Map
 
-Activities
+# User Story Mapping – Online Code Editor
 
-Authentication | Questions | Coding | Execution | Submission | Collaboration | History | Admin | Security
-
-Stories
-
-Register  
-Login  
-RBAC  
-
-Create Question  
-Manage Test Cases  
-
-Code Editor  
-Select Language  
-Input/Output  
-
-Run Code  
-Show Errors  
-
-Auto Grading  
-Grading Results  
-
-Create Session  
-Join Session  
-Realtime Code Sync  
-Realtime Result Sync  
-
-Submission History  
-
-Admin Dashboard  
-
-Sandbox Isolation
+| Authentication | Questions | Coding | Execution | Submission | Collaboration | History | Admin | Security |
+|---|---|---|---|---|---|---|---|---|
+| Register | Create Question | Code Editor | Run Code | Auto Grading | Create Session | Submission History | Admin Dashboard | Sandbox Isolation |
+| Login | Manage Test Cases | Select Language | Show Errors | Grading Results | Join Session |  |  |  |
+| RBAC |  | Input / Output |  |  | Realtime Code Sync |  |  |  |
+|  |  |  |  |  | Realtime Result Sync |  |  |  |
 
 
 ---
