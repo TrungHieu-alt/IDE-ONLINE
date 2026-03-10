@@ -2,7 +2,7 @@
 
 **Phiên bản:** 2.0  
 **Ngày cập nhật:** Tháng 3, 2026  
-**Tổng số:** 15 User Stories (MVP)
+**Tổng số:** 19 User Stories (MVP)
 
 ---
 
@@ -351,8 +351,8 @@ ACCEPTANCE CRITERIA:
 - [ ] Overall status determination:
   - Nếu ALL PASS → `ACCEPTED` ✅
   - Nếu some fail → `WRONG_ANSWER` ⚠️
-  - Nếu any TLE → `TIME_LIMIT_EXCEEDED` ⏱️
-  - Nếu any RE → `RUNTIME_ERROR` ❌
+  - Nếu có bất kỳ time limit exceeded → `TIME_LIMIT_EXCEEDED` ⏱️
+  - Nếu có bất kỳ runtime error → `RUNTIME_ERROR` ❌
   - Nếu compile error → `COMPILATION_ERROR` ❌
 
 - [ ] Result format:
@@ -556,7 +556,7 @@ ACCEPTANCE CRITERIA:
 
 - [ ] Permission check:
   - VIEWER role required (or ADMIN/CODER)
-  - Return: `401` if permission denied
+  - Return: `403` if permission denied
 
 - [ ] Join response:
   - `200 OK` + session data:
@@ -634,7 +634,7 @@ ACCEPTANCE CRITERIA:
 
 - [ ] Test case results (Submit):
   - When coder submit → broadcast: `grading_progress`
-  - Payload: `{test_cases_completed: 5, test_cases_total: 8}`
+  - Payload: `{completed: 5, total: 8}`
   - Viewer sees: "Grading 5/8 test cases..."
 
 - [ ] Final result broadcast:
