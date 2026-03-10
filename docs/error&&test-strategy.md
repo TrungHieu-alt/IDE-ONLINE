@@ -2,7 +2,7 @@
 ## Nền Tảng Biên Tập Mã Online (Online Code Editor)
 
 **Phiên bản:** 2.0 Thực Hành  
-**Ngày:** Tháng 3 năm 2025  
+**Ngày:** Tháng 3 năm 2026  
 **Trạng thái:** Sẵn sàng sử dụng
 
 ---
@@ -24,9 +24,9 @@
 Kiểm tra logic nhỏ, độc lập:
 
 **Phạm vi test:**
-- Mapping language → Judge0 ID (C=49, C++=53, JavaScript=63, Python=71, Java=62)
+- Mapping language → Judge0 ID (C=50, C++=54, JavaScript=63, Python=71, Java=62)
 - Chuẩn hóa output: trim whitespace, xử lý `\n`, `\r\n`, `\t`
-- Kiểm tra status submission: Accepted, CE, RE, TLE, MLE
+- Kiểm tra status submission: ACCEPTED, COMPILATION_ERROR, RUNTIME_ERROR, TIME_LIMIT_EXCEEDED, MEMORY_LIMIT_EXCEEDED
 - Validate JWT token (format đúng, chưa hết hạn, signature hợp lệ)
 - Kiểm tra quyền theo role (Viewer không chạy code, Coder không tạo câu hỏi)
 
@@ -61,7 +61,7 @@ Kiểm tra các module giao tiếp với nhau:
 
 **Luồng chính test:**
 ```
-User login → JWT valid → truy cập /api/submit
+User login → JWT valid → truy cập /api/submissions/submit
 → Backend validate code
 → gọi Judge0 API
 → Judge0 compile + execute
@@ -101,8 +101,8 @@ Kiểm tra toàn bộ flow người dùng:
 
 **Flow 3: Lỗi Execution từ Judge0**
 - Coder viết code lỗi cú pháp → Judge0 trả Compile Error → hiển thị lỗi
-- Coder viết vòng lặp vô hạn → Judge0 timeout → trả TLE (>10 giây)
-- Coder dùng quá nhiều bộ nhớ → Judge0 trả MLE (>256MB)
+- Coder viết vòng lặp vô hạn → Judge0 timeout → trả `TIME_LIMIT_EXCEEDED` (>10 giây)
+- Coder dùng quá nhiều bộ nhớ → Judge0 trả `MEMORY_LIMIT_EXCEEDED` (>256MB)
 
 **Flow 4: Đồng Bộ Realtime**
 - Coder gõ `def hello():`
@@ -322,7 +322,7 @@ setTimeout(() => {
 **Ví dụ:**
 - Quên chọn ngôn ngữ
 - Code rỗng
-- Code > 64KB
+- Code > 1MB
 
 **Message:** `"Vui lòng chọn ngôn ngữ trước khi chạy code."`
 
@@ -364,12 +364,12 @@ setTimeout(() => {
 #### E. Execution Error từ Judge0 (EXPECTED)
 **HTTP Status:** 200 (submission saved)  
 **Status values:**
-- ✅ **Accepted** → code đúng
-- ❌ **CE** (Compile Error) → hiển thị compiler message
-- ❌ **RE** (Runtime Error) → hiển thị stderr
-- ❌ **TLE** (Time Limit Exceeded) → "Chương trình vượt 10 giây"
-- ❌ **MLE** (Memory Limit Exceeded) → "Vượt 256MB bộ nhớ"
-- ❌ **WA** (Wrong Answer) → "Output: ..., Expected: ..."
+- ✅ **ACCEPTED** → code đúng
+- ❌ **COMPILATION_ERROR** (Compile Error) → hiển thị compiler message
+- ❌ **RUNTIME_ERROR** (Runtime Error) → hiển thị stderr
+- ❌ **TIME_LIMIT_EXCEEDED** (Time Limit Exceeded) → "Chương trình vượt 10 giây"
+- ❌ **MEMORY_LIMIT_EXCEEDED** (Memory Limit Exceeded) → "Vượt 256MB bộ nhớ"
+- ❌ **WRONG_ANSWER** (Wrong Answer) → "Output: ..., Expected: ..."
 
 **Xử lý:** Lưu đầy đủ vào DB, hiển thị UI rõ ràng, không alert ops
 

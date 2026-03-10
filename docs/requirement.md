@@ -2,8 +2,8 @@
 ## Online Code Editor Platform
 
 **Project Name:** Online Code Editor  
-**Version:** 1.0  
-**Date:** March 2025  
+**Version:** 2.0  
+**Date:** March 2026  
 **Status:** In Progress
 
 ---
@@ -187,7 +187,7 @@ Platform cho phép người dùng viết code online với nhiều ngôn ngữ l
 | Rủi ro | Mức độ ảnh hưởng | Mô tả | Biện pháp giảm thiểu |
 |--------|-----------------|-------|----------------------|
 | Tắc nghẽn hàng đợi | High | Nhiều user submit code cùng lúc làm queue backlog | Queue system (Redis / RabbitMQ), autoscaling workers |
-| Đo lường thời gian không nhất quán | Medium | CPU quá tải khiến chương trình bị TLE không công bằng | Dedicated judge worker, CPU quota |
+| Đo lường thời gian không nhất quán | Medium | CPU quá tải khiến chương trình bị `TIME_LIMIT_EXCEEDED` không công bằng | Dedicated judge worker, CPU quota |
 | Chi phí hạ tầng tăng cao | Medium | Sandbox khởi tạo chậm hoặc không tối ưu | Container reuse, lightweight runtime |
 
 ## 11. EDGE CASES
@@ -205,8 +205,8 @@ Platform cho phép người dùng viết code online với nhiều ngôn ngữ l
 | Stable Internet | Người dùng có kết nối internet ổn định |
 | Judge0 uptime | Judge0 available ~99% uptime |
 | Trusted environment | User không cố ý hack sandbox |
-| Code size limit | Code length < 64KB |
-| Testcase size | Input/Output ≤ 10MB |
+| Code size limit | Code length <= 1MB |
+| Testcase size | Input/Output <= 10,000 chars |
 
 ---
 
@@ -224,7 +224,7 @@ Platform cho phép người dùng viết code online với nhiều ngôn ngữ l
 ---
 
 **Document Owner:** Project Team  
-**Last Updated:** March 2025  
+**Last Updated:** March 2026  
 **Review Date:** TBD
 
 
