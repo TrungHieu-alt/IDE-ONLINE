@@ -1,0 +1,81 @@
+# C4 DIAGRAM
+
+## Online Code Editor Platform
+
+**Version:** 1.0  
+**Date:** March 2026  
+**Status:** Draft
+
+---
+
+## 1. Overview
+
+Tài liệu này mô tả kiến trúc hệ thống theo mô hình C4 cho nền tảng **Online Code Editor**.  
+Cấu trúc gồm 4 mức:
+
+- **Level 1 - System Context**: Bối cảnh hệ thống và các actor/hệ thống bên ngoài
+- **Level 2 - Container**: Các khối triển khai chính trong hệ thống
+- **Level 3 - Component (Frontend)**: Các thành phần chính của frontend
+- **Level 3 - Component (Backend)**: Các thành phần chính của backend
+
+---
+
+## 2. Level 1 - System Context Diagram
+
+Mức này mô tả các tác nhân chính tương tác với hệ thống gồm:
+
+- **Coder**: viết code, chạy code, submit bài
+- **Viewer**: theo dõi code realtime với quyền chỉ xem
+- **Admin**: quản lý người dùng và câu hỏi
+- **Judge0**: hệ thống thực thi code sandbox bên ngoài
+
+![System Context](../assets/Context%20Diagram%20%28Current%29.svg)
+
+---
+
+## 3. Level 2 - Container Diagram
+
+Mức container thể hiện các khối chính trong hệ thống:
+
+- **Frontend**: giao diện web cho coder/viewer/admin
+- **Backend**: xử lý business logic, authentication, API và orchestration
+- **Realtime Gateway**: đồng bộ code realtime qua WebSocket
+- **PostgreSQL**: lưu user, question, submission, session data
+- **Judge0**: thực thi source code trong môi trường sandbox
+
+![Container Diagram](../assets/Online%20Code%20Editor%20App%20Diagram%20%28Current%29.svg)
+
+---
+
+## 4. Level 3 - Frontend Component Diagram
+
+Mức này tập trung vào các thành phần chính của frontend:
+
+- **Monaco Editor**: code editor trên trình duyệt
+- **Socket Client**: gửi và nhận dữ liệu realtime
+- **API Client**: gọi REST API tới backend
+- **Other Pages**: các màn hình khác như login, dashboard, history
+
+![Frontend Component Diagram](../assets/Frontend%20Component%20Diagram%20%28Current%29.svg)
+
+---
+
+## 5. Level 3 - Backend Component Diagram
+
+Mức này mô tả các nhóm thành phần backend phục vụ:
+
+- authentication và user management
+- question/test case management
+- submission/execution flow
+- realtime session handling
+- integration với PostgreSQL, Frontend và Judge0
+
+![Backend Component Diagram](../assets/Backend%20Component%20Diagram%20%28Current%29.svg)
+
+---
+
+## 6. Notes
+
+- Các sơ đồ SVG được lưu trong thư mục `assets/`
+- Tài liệu này dùng để tham chiếu cùng với `requirement.md`, `api-spec.md` và `erd.md`
+- Nếu cập nhật sơ đồ trong `assets`, file Markdown này vẫn dùng lại cùng đường dẫn asset hiện tại
