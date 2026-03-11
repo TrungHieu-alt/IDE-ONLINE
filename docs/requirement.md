@@ -75,44 +75,52 @@ Platform cho phép người dùng viết code online với nhiều ngôn ngữ l
 ---
 
 ## 6. USER ROLES & PERMISSIONS
-*Ký hiệu: ✅ (Được phép) | ❌ (Từ chối) | ⚠️ (Có điều kiện)*
+**Use Case:** Coder stream code, Viewer (interviewer) chỉ xem realtime
+**Ký hiệu:** ✅ (Được phép) | ❌ (Từ chối) | ⚠️ (Có điều kiện)
 
-| Nhóm Tài Nguyên (Resources)  | Hành động (Actions)                                      |                           Coder                           |                      Viewer                     | Admin |
-| :--------------------------- | :------------------------------------------------------- | :-------------------------------------------------------: | :---------------------------------------------: | :---: |
-| **Authentication / Account** | Đăng ký tài khoản                                        |                             ✅                             |                        ✅                        |   ✅   |
-|                              | Đăng nhập / Đăng xuất                                    |                             ✅                             |                        ✅                        |   ✅   |
-|                              | Xem hồ sơ cá nhân của chính mình                         |                             ✅                             |                        ✅                        |   ✅   |
-|                              | Cập nhật hồ sơ cá nhân của chính mình                    |                             ✅                             |                        ✅                        |   ✅   |
-|                              | Xem hồ sơ người dùng khác                                |                             ❌                             |                        ❌                        |   ✅   |
-| **Code Editor / Session**    | Tạo phiên code mới                                       |                             ✅                             |                        ❌                        |   ✅   |
-|                              | Chỉnh sửa code trong editor                              |                             ✅                             |                        ❌                        |   ✅   |
-|                              | Chọn ngôn ngữ lập trình                                  |                             ✅                             |                        ❌                        |   ✅   |
-|                              | Xem code đang được viết realtime                         | ✅ *(Session của chính mình)* | ✅ *(Session công khai qua link)* |   ✅   |
-|                              | Tham gia session với quyền chỉ xem                       | ⚠️ *(Có thể join session công khai của người khác với quyền viewer; không được edit)* |                        ✅                        |   ✅   |
-|                              | Chỉnh sửa code trong session của người khác              |                             ❌                             |                        ❌                        |   ✅   |
-| **Code Execution**           | Chạy code (Run)                                          |                             ✅                             |                        ❌                        |   ✅   |
-|                              | Xem kết quả chạy code của chính mình                     |                             ✅                             |                        ❌                        |   ✅   |
-|                              | Xem kết quả chạy code realtime của session đang theo dõi | ⚠️ *(Session của chính mình hoặc session công khai qua link mà user đang theo dõi)* |                        ✅                        |   ✅   |
-|                              | Dừng / hủy execution đang chạy                           |            ⚠️ *(Chỉ execution của chính mình)*            |                        ❌                        |   ✅   |
-| **History / Submissions**    | Xem lịch sử run / submit của chính mình                  |                             ✅                             |                        ❌                        |   ✅   |
-|                              | Xem chi tiết submission của chính mình                   |                             ✅                             |                        ❌                        |   ✅   |
-|                              | Xem submission của người khác                            |                             ❌                             | ⚠️ *(Chỉ kết quả realtime của session công khai đang theo dõi; không xem full history)* |   ✅   |
-|                              | Xóa lịch sử submission của người khác                    |                             ❌                             |                        ❌                        |   ✅   |
-| **Questions**                | Xem danh sách câu hỏi                                    |                             ✅                             |                        ✅                        |   ✅   |
-|                              | Xem chi tiết câu hỏi                                     |                             ✅                             |                        ✅                        |   ✅   |
-|                              | Tạo câu hỏi mới                                          |                             ❌                             |                        ❌                        |   ✅   |
-|                              | Cập nhật câu hỏi                                         |                             ❌                             |                        ❌                        |   ✅   |
-|                              | Xóa câu hỏi                                              |                             ❌                             |                        ❌                        |   ✅   |
-| **Test Cases**               | Xem test case mẫu (public/sample)                        |                             ✅                             |                        ✅                        |   ✅   |
-|                              | Xem test case ẩn (hidden)                                |                             ❌                             |                        ❌                        |   ✅   |
-|                              | Tạo / sửa / xóa test case                                |                             ❌                             |                        ❌                        |   ✅   |
-| **Users & RBAC**             | Xem danh sách user                                       |                             ❌                             |                        ❌                        |   ✅   |
-|                              | Khóa / mở khóa tài khoản                                 |                             ❌                             |                        ❌                        |   ✅   |
-|                              | Xóa tài khoản                                            |                             ❌                             |                        ❌                        |   ✅   |
-|                              | Phân quyền (gán role)                                    |                             ❌                             |                        ❌                        |   ✅   |
-| **System / Monitoring**      | Xem dashboard hệ thống                                   |                             ❌                             |                        ❌                        |   ✅   |
-|                              | Xem tất cả submissions / logs / execution metrics        |                             ❌                             |                        ❌                        |   ✅   |
+| Nhóm Tài Nguyên | Hành động | Coder | Viewer | Admin |
+|---|---|:---:|:---:|:---:|
+| **Authentication / Account** | Đăng ký tài khoản | ✅ | ✅ | ❌ |
+| | Đăng nhập / Đăng xuất | ✅ | ✅ | ✅ |
+| | Xem hồ sơ cá nhân của chính mình | ✅ | ✅ | ✅ |
+| | Cập nhật hồ sơ cá nhân của chính mình | ✅ | ✅ | ✅ |
+| **Code Editor / Session** | Tạo phiên code mới | ✅ | ❌ | ✅ |
+| | Chỉnh sửa code trong editor | ✅ | ❌ | ✅ |
+| | Chọn ngôn ngữ lập trình | ✅ | ❌ | ✅ |
+| | Xem code đang được viết realtime | ✅ | ✅ | ✅ |
+| | Tham gia session với quyền chỉ xem (qua link) | ❌ | ✅ | ✅ |
+| **Code Execution** | Chạy code (Run) | ✅ | ❌ | ✅ |
+| | Xem kết quả chạy code của chính mình | ✅ | ❌ | ✅ |
+| | Xem kết quả chạy code realtime đang chạy | ⚠️ | ✅ | ✅ |
+| | Dừng / hủy execution đang chạy | ⚠️ | ❌ | ✅ |
+| **History / Submissions** | Xem lịch sử run / submit của chính mình | ✅ | ❌ | ✅ |
+| | Xem chi tiết submission của chính mình | ✅ | ❌ | ✅ |
+| | Xem tất cả submissions của tất cả user | ❌ | ❌ | ✅ |
+| | Xóa submission | ❌ | ❌ | ✅ |
+| **Questions** | Xem danh sách câu hỏi | ✅ | ✅ | ✅ |
+| | Xem chi tiết câu hỏi | ✅ | ✅ | ✅ |
+| | Tạo câu hỏi mới | ❌ | ❌ | ✅ |
+| | Cập nhật câu hỏi | ❌ | ❌ | ✅ |
+| | Xóa câu hỏi | ❌ | ❌ | ✅ |
+| **Test Cases** | Xem test case mẫu (public/sample) | ✅ | ✅ | ✅ |
+| | Xem test case ẩn (hidden) | ❌ | ❌ | ✅ |
+| | Tạo / sửa / xóa test case | ❌ | ❌ | ✅ |
+| **Users & RBAC** | Xem danh sách user | ❌ | ❌ | ✅ |
+| | Khóa / mở khóa tài khoản | ❌ | ❌ | ✅ |
+| | Xóa tài khoản | ❌ | ❌ | ✅ |
+| | Phân quyền (gán role) | ❌ | ❌ | ✅ |
+| **System / Monitoring** | Xem dashboard hệ thống | ❌ | ❌ | ✅ |
+| | Xem tất cả logs / execution metrics | ❌ | ❌ | ✅ |
 
+---
+
+## Chú thích
+
+**⚠️ Coder xem kết quả realtime:** Chỉ session của chính mình hoặc session công khai qua link mà user đang theo dõi
+
+**⚠️ Coder dừng execution:** Chỉ execution của chính mình
+
+**⚠️ Viewer xem submission:** Chỉ kết quả realtime của session công khai đang theo dõi; không xem full history
 
 ---
 
@@ -191,6 +199,7 @@ Platform cho phép người dùng viết code online với nhiều ngôn ngữ l
 **Document Owner:** Project Team  
 **Last Updated:** March 2026  
 **Review Date:** TBD
+
 
 
 
