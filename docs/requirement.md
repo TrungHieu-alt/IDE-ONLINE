@@ -46,12 +46,12 @@ Platform cho phép người dùng viết code online với nhiều ngôn ngữ l
 | ID | Requirement | Description |
 |----|-------------|-------------|
 | **F1** | Code Editor | Web-based editor (Monaco) với syntax highlight cho 9 ngôn ngữ. Support chọn ngôn ngữ từ dropdown. |
-| **F2** | Code Execution | User click **Run** → gửi code đến Judge0 → nhận kết quả (stdout, stderr, status, time, memory) |
+| **F2** | Code Execution | User click **Run/Submit** → backend tạo submission async, gửi code đến Judge0, trả về `submission_id` ngay và client theo dõi kết quả qua polling/WebSocket |
 | **F3** | Realtime Sync | Coder gõ code → Viewer thấy live realtime (1 chiều, debounce 300ms) |
-| **F4** | Question Management | Admin tạo/sửa/xóa câu hỏi (title, description, sample input/output) |
+| **F4** | Question Management | Admin tạo/sửa/xóa câu hỏi (title, description markdown; sample input/output được nhúng trong description) |
 | **F5** | Test Case Management | Admin tạo hidden test case, hệ thống auto-compare output vs expected |
 | **F6** | User Registration | User đăng ký email/password, email verification |
-| **F7** | User Login | Login JWT, remember session |
+| **F7** | User Login | Login với access token + refresh token rotation để support remember session |
 | **F8** | Role Assignment | Admin gán role (Admin/Coder/Viewer) cho user |
 | **F9** | Submission History | Lưu & display: question, code, language, status, execution time, memory, timestamp |
 | **F10** | Admin Dashboard | Xem tất cả submission, filter by user/question/date |
@@ -65,7 +65,7 @@ Platform cho phép người dùng viết code online với nhiều ngôn ngữ l
 | **NFR1** | Isolation | Code user A không truy cập file/process user B (Judge0 container sandbox) |
 | **NFR2** | Resource Limit | Execution time max 10s, Memory max 256MB |
 | **NFR3** | Concurrency | Hỗ trợ ≥10 concurrent submissions, queue nếu vượt |
-| **NFR4** | Response Time | API response < 500ms, page load < 2s |
+| **NFR4** | Response Time | Non-execution API response < 500ms, execution create endpoint < 500ms, page load < 2s |
 | **NFR5** | Realtime Latency | Sync delay < 1 giây |
 | **NFR6** | Security | Sandbox chặn fork/network call, JWT auth, HTTPS |
 | **NFR7** | Availability | Judge0 down → hiển thị error rõ ràng, auto-retry, không crash system |
@@ -86,16 +86,16 @@ Platform cho phép người dùng viết code online với nhiều ngôn ngữ l
 | **Code Editor / Session**    | Tạo phiên code mới                                       |                             ✅                             |                        ❌                        |   ✅   |
 |                              | Chỉnh sửa code trong editor                              |                             ✅                             |                        ❌                        |   ✅   |
 |                              | Chọn ngôn ngữ lập trình                                  |                             ✅                             |                        ❌                        |   ✅   |
-|                              | Xem code đang được viết realtime                         | ⚠️ *(Chỉ session của chính mình hoặc được cấp quyền xem)* |                        ✅                        |   ✅   |
+|                              | Xem code đang được viết realtime                         | ⚠️ *(Chỉ session của chính mình hoặc session công khai qua link)* |                        ✅                        |   ✅   |
 |                              | Tham gia session với quyền chỉ xem                       |                             ❌                             |                        ✅                        |   ✅   |
 |                              | Chỉnh sửa code trong session của người khác              |                             ❌                             |                        ❌                        |   ✅   |
 | **Code Execution**           | Chạy code (Run)                                          |                             ✅                             |                        ❌                        |   ✅   |
 |                              | Xem kết quả chạy code của chính mình                     |                             ✅                             |                        ❌                        |   ✅   |
-|                              | Xem kết quả chạy code realtime của session đang theo dõi | ⚠️ *(Chỉ session của chính mình hoặc được cấp quyền xem)* |                        ✅                        |   ✅   |
+|                              | Xem kết quả chạy code realtime của session đang theo dõi | ⚠️ *(Chỉ session của chính mình hoặc session công khai qua link)* |                        ✅                        |   ✅   |
 |                              | Dừng / hủy execution đang chạy                           |            ⚠️ *(Chỉ execution của chính mình)*            |                        ❌                        |   ✅   |
 | **History / Submissions**    | Xem lịch sử run / submit của chính mình                  |                             ✅                             |                        ❌                        |   ✅   |
 |                              | Xem chi tiết submission của chính mình                   |                             ✅                             |                        ❌                        |   ✅   |
-|                              | Xem submission của người khác                            |                             ❌                             | ⚠️ *(Chỉ các session được phân quyền theo dõi)* |   ✅   |
+|                              | Xem submission của người khác                            |                             ❌                             | ⚠️ *(Chỉ kết quả realtime của session công khai đang theo dõi; không xem full history)* |   ✅   |
 |                              | Xóa lịch sử submission của người khác                    |                             ❌                             |                        ❌                        |   ✅   |
 | **Questions**                | Xem danh sách câu hỏi                                    |                             ✅                             |                        ✅                        |   ✅   |
 |                              | Xem chi tiết câu hỏi                                     |                             ✅                             |                        ✅                        |   ✅   |
@@ -125,7 +125,7 @@ Platform cho phép người dùng viết code online với nhiều ngôn ngữ l
 | **Code Execution** | Judge0 (Selfhost) | Sandbox sẵn, hỗ trợ 60+ ngôn ngữ, isolated environment |
 | **Realtime** | WebSocket (Socket.io) | Full control, low latency |
 | **Code Editor** | Monaco Editor | VS Code engine, syntax highlight, free |
-| **Auth** | JWT + bcrypt | Stateless, scalable, secure password hashing |
+| **Auth** | JWT access token + rotating refresh token + bcrypt | Short-lived access token, remember session, secure password hashing |
 | **Container** | Docker + Docker Compose | Selfhost Judge0 + app |
 | **Cache** (Optional) | Redis | Rate limiting, execution result cache |
 
@@ -165,7 +165,7 @@ Platform cho phép người dùng viết code online với nhiều ngôn ngữ l
 |----------|-----------|
 | **Judge0 Selfhost** | Kiểm soát tài nguyên, isolation, cost-effective |
 | **WebSocket 1-way sync** | Chỉ cần Coder → Viewer, không cần conflict resolution |
-| **JWT Auth** | Stateless, scalable, không cần session storage |
+| **JWT + Refresh Token** | Access token ngắn hạn giảm rủi ro lộ token, refresh token rotation hỗ trợ remember session và revoke |
 | **PostgreSQL** | ACID compliance, relation data, transaction support |
 | **Docker Compose** | Dễ deploy, tất cả trong 1 package (Judge0 + app + DB) |
 | **Debounce 300ms** | Cân bằng realtime vs network load |
@@ -174,8 +174,8 @@ Platform cho phép người dùng viết code online với nhiều ngôn ngữ l
 
 ## 15. SUCCESS CRITERIA
 
-✅ User đăng ký, login, chọn câu hỏi  
-✅ Viết code, click Run, nhận kết quả trong < 2s  
+✅ User đăng ký, verify email, login, refresh session, chọn câu hỏi  
+✅ Viết code, click Run/Submit, nhận `submission_id` ngay và theo dõi kết quả async  
 ✅ Realtime sync code Coder → Viewer realtime  
 ✅ Admin tạo test case, auto-grade submission  
 ✅ Isolation: Code user A không truy cập user B  

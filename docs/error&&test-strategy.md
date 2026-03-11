@@ -27,7 +27,7 @@ Kiểm tra logic nhỏ, độc lập:
 - Mapping language → Judge0 ID (C=50, C++=54, JavaScript=63, Python=71, Java=62)
 - Chuẩn hóa output: trim whitespace, xử lý `\n`, `\r\n`, `\t`
 - Kiểm tra status submission: ACCEPTED, COMPILATION_ERROR, RUNTIME_ERROR, TIME_LIMIT_EXCEEDED, MEMORY_LIMIT_EXCEEDED
-- Validate JWT token (format đúng, chưa hết hạn, signature hợp lệ)
+- Validate access token (format đúng, chưa hết hạn, signature hợp lệ)
 - Kiểm tra quyền theo role (Viewer không chạy code, Coder không tạo câu hỏi)
 
 **Công cụ:** Jest, Vitest  
@@ -57,11 +57,11 @@ Kiểm tra các module giao tiếp với nhau:
 - Backend ↔ Judge0 (submit code, nhận kết quả, xử lý 5xx)
 - Backend ↔ PostgreSQL (lưu submission, consistency)
 - Backend ↔ WebSocket (đồng bộ realtime)
-- Auth middleware ↔ RBAC (JWT hợp lệ → grant permission)
+- Auth middleware ↔ RBAC (access token hợp lệ → grant permission)
 
 **Luồng chính test:**
 ```
-User login → JWT valid → truy cập /api/submissions/submit
+User login → access token valid → truy cập /api/submissions/submit
 → Backend validate code
 → gọi Judge0 API
 → Judge0 compile + execute
@@ -73,8 +73,8 @@ User login → JWT valid → truy cập /api/submissions/submit
 
 **Test scenario cụ thể:**
 1. **Lỗi Judge0 timeout**: Gửi code → Judge0 không phản hồi trong 30s → retry 3 lần (1s, 2s, 4s) → nếu vẫn fail → lưu trạng thái SYSTEM_ERROR
-2. **Database transaction fail**: Insert submission + update user stats trong 1 transaction → nếu update stats fail → rollback cả submission
-3. **Concurrent submit từ 1 user**: User click Run 5 lần nhanh → DB lưu 5 submission → verify user_stats = 5 (không duplicate)
+2. **Database transaction fail**: Insert submission + execution_results trong 1 transaction → nếu insert result fail → rollback cả submission
+3. **Concurrent submit từ 1 user**: User click Run 5 lần nhanh → DB lưu 5 submission → verify `COUNT(*) = 5` trong `submissions`
 4. **Hidden test case security**: Truy vấn test case → DTO trả về cho coder KHÔNG chứa expected_output
 
 **Công cụ:** Jest (mock API), Docker Compose (local Judge0), Postman  
@@ -88,8 +88,8 @@ Kiểm tra toàn bộ flow người dùng:
 **Flow 1: Đăng ký & Đăng nhập**
 - Đăng ký email/password → server gửi email xác thực
 - Click link xác thực trong email → account activated
-- Đăng nhập email/password → nhận JWT token
-- Dùng JWT token để truy cập các API protected
+- Đăng nhập email/password → nhận access token + refresh token
+- Dùng access token để truy cập các API protected
 
 **Flow 2: Chạy Code (Happy Path)**
 - Coder chọn câu hỏi Python
@@ -111,7 +111,7 @@ Kiểm tra toàn bộ flow người dùng:
 - Viewer disconnect → reconnect → nhận full code snapshot
 
 **Flow 5: Admin Tạo Câu Hỏi & Chấm Điểm**
-- Admin tạo câu hỏi (title, description, sample input/output)
+- Admin tạo câu hỏi (title, description; sample input/output nhúng trong description)
 - Admin tạo test case ẩn (hidden) với expected output
 - Coder submit code → hệ thống so sánh output vs hidden expected
 - Coder KHÔNG thể thấy hidden expected output (API trả DTO khác)
@@ -125,7 +125,7 @@ Kiểm tra toàn bộ flow người dùng:
 ### 2.4 Performance & Load Test
 
 **Mục tiêu latency:**
-- Submit code latency: P50 < 200ms, P95 < 500ms, P99 < 1000ms
+- Submit/Run create endpoint latency: P50 < 200ms, P95 < 500ms, P99 < 1000ms
 - Realtime sync latency: P50 < 300ms, P95 < 800ms (coder gõ → viewer thấy)
 - Page load time: < 2 giây (first contentful paint)
 
@@ -157,7 +157,7 @@ Kiểm tra toàn bộ flow người dùng:
 - **Database timeout**: Query vượt 5s → retry, nếu vẫn fail → error message
 - **WebSocket disconnect**: Client tự động reconnect với exponential backoff
 - **Network latency**: Simulate 500ms delay → verify realtime vẫn < 1s
-- **Queue full**: 100 submission queue full → submission mới reject hay queue?
+- **Queue full**: 100 submission queue full → define rõ reject `503` hay tiếp tục queue với SLA khác
 
 **Công cụ:** Docker kill, Linux `tc` command (traffic control), network simulation
 
@@ -205,19 +205,19 @@ Kiểm tra toàn bộ flow người dùng:
 
 ### 3.2 Transaction & Concurrency (PHẢI CHI TIẾT)
 
-**Problem:** Concurrent submission → DB stats sai, data inconsistent
+**Problem:** Concurrent submission → mất record hoặc ghi trạng thái không nhất quán
 
 **Atomic Transaction:**
 ```sql
--- BAD: 2 step không atomic
+-- BAD: tạo submission và result tách rời
 INSERT INTO submissions (...) RETURNING id;
-UPDATE users SET total_submit = total_submit + 1;
--- Nếu UPDATE fail → submission orphan, stats sai
+INSERT INTO execution_results (...);
+-- Nếu bước 2 fail → submission dangling, data sai
 
 -- GOOD: 1 transaction
 BEGIN;
   INSERT INTO submissions (...);
-  UPDATE users SET total_submit = total_submit + 1;
+  INSERT INTO execution_results (...);
 COMMIT;
 -- All or nothing
 ```
@@ -225,7 +225,7 @@ COMMIT;
 **Concurrent Submit Test:**
 - User click Run button 5 lần nhanh liên tiếp
 - Verify DB có đúng 5 submission rows
-- Verify user stats = 5 (không duplicate, không mất)
+- Verify `COUNT(*) FROM submissions WHERE user_id = ?` tăng đúng 5
 - Verify mỗi submission có unique ID + timestamp tăng
 
 **Judge0 Callback Race:**
@@ -246,7 +246,7 @@ Promise.all([
 ])
 .then(() => {
   // Verify DB: COUNT(*) = 3
-  // Verify user stats: 3
+  // Verify submission rows created đủ 3 bản ghi
 })
 
 // Callback race test
@@ -331,9 +331,9 @@ setTimeout(() => {
 #### B. Authentication Error (Chưa đăng nhập)
 **HTTP Status:** 401  
 **Ví dụ:**
-- JWT token thiếu
-- JWT hết hạn (> 24h)
-- JWT signature không đúng
+- Access token thiếu
+- Access token hết hạn (> 15 phút)
+- Access token signature không đúng
 
 **Message:** `"Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại."`
 

@@ -38,7 +38,7 @@
 |---|---------------|------|----------|-----------|---------------|
 | 1 | Output có thừa whitespace | Execution | 🟡 HIGH | WA sai không công bằng | Tuần 1 |
 | 2 | Floating point precision | Execution | 🔴 CRITICAL | WA sai (bài khoa học) | Tuần 1 |
-| 3 | Output quá dài (>100MB) | Execution | 🔴 CRITICAL | Crash hệ thống | Tuần 1 |
+| 3 | Output quá dài (>100KB) | Execution | 🔴 CRITICAL | Crash hệ thống / vượt giới hạn output | Tuần 1 |
 | 4 | Timeout boundary (9.9s vs 10.1s) | Execution | 🟡 HIGH | Công bằng điểm | Tuần 1 |
 | 5 | Event out-of-order | Realtime | 🔴 CRITICAL | Viewer thấy sai code | Tuần 1 |
 | 6 | Duplicate event | Realtime | 🔴 CRITICAL | Code duplicate | Tuần 1 |
@@ -111,7 +111,7 @@ expect(normalizeOutput("42 \n")).toBe("42");
 
 ---
 
-#### 2. Floating point precision (CRITICAL)
+#### 2. Floating point precision (CRITICAL / only if product later enables tolerant judging)
 **Vấn đề:** Bài khoa học: 1/3 → expected "0.3333333333", code output "0.3333333334"
 
 ```python
@@ -121,7 +121,7 @@ expect(normalizeOutput("42 \n")).toBe("42");
 # Result: WA ❌ (nhưng cơ bản đúng)
 ```
 
-**Giải pháp:**
+**Giải pháp (nếu hệ thống hỗ trợ tolerant judging):**
 ```javascript
 function floatCompare(a, b, epsilon = 1e-6) {
   return Math.abs(a - b) < epsilon;
@@ -138,19 +138,21 @@ expect(floatCompare(expected, output, 1e-6)).toBe(true);
 
 **Severity:** 🔴 CRITICAL
 
+**Lưu ý hiện tại:** Core API hiện chỉ define output compare theo exact match sau khi trim trailing whitespace/newlines. Nếu giữ rule này cho MVP, edge case này là một quyết định sản phẩm tương lai chứ không phải behavior hiện tại.
+
 ---
 
-#### 3. Output quá dài (>100MB) (CRITICAL)
-**Vấn đề:** Code print 1 tỷ dòng → crash hệ thống
+#### 3. Output quá dài (>100KB) (CRITICAL)
+**Vấn đề:** Code print quá nhiều dữ liệu → vượt giới hạn output và gây quá tải
 
 ```python
 for i in range(1000000000):
-    print(i)  # Output = 1GB → crash
+    print(i)  # Output cực lớn → vượt output limit
 ```
 
 **Giải pháp:**
 ```javascript
-const MAX_OUTPUT = 10 * 1024 * 1024;  // 10MB limit
+const MAX_OUTPUT = 100 * 1024;  // 100KB limit
 if (stdout.length > MAX_OUTPUT) {
   return { status: "RE", message: "Output quá lớn" };
 }
@@ -362,30 +364,26 @@ if (missedCount < 100) {
 ### DATABASE & CONCURRENCY (2 cases)
 
 #### 9. Concurrent submit race condition (CRITICAL)
-**Vấn đề:** User click Run 5 lần nhanh → stats = 1 (thay vì 5)
+**Vấn đề:** User click Run 5 lần nhanh → một phần submission/result bị mất hoặc ghi không đồng bộ
 
 ```
 Race condition:
-  T1: SELECT total_submit = 0
-  T2: SELECT total_submit = 0
-  T3: SELECT total_submit = 0
-  T1: UPDATE total_submit = 0 + 1 = 1
-  T2: UPDATE total_submit = 0 + 1 = 1 (overwrite!)
-  T3: UPDATE total_submit = 0 + 1 = 1 (overwrite!)
-  
-Final: total_submit = 1 ❌ (should be 3)
+  T1: INSERT submission A
+  T2: INSERT submission B
+  T3: INSERT submission C
+  T1: INSERT execution_result A fail
+  T2: INSERT execution_result B ok
+  T3: INSERT execution_result C ok
+
+  Final: có submission dangling / thiếu result ❌
 ```
 
 **Giải pháp:**
 ```sql
--- GOOD: Atomic increment
-UPDATE users SET total_submit = total_submit + 1 
-WHERE id = ?;
-
 -- GOOD: Transaction
 BEGIN;
   INSERT INTO submissions (...);
-  UPDATE users SET total_submit = total_submit + 1;
+  INSERT INTO execution_results (...);
 COMMIT;
 ```
 
@@ -394,8 +392,8 @@ COMMIT;
 const promises = Array(5).fill(null).map(() => submitCode());
 await Promise.all(promises);
 
-const user = await db.users.findOne(userId);
-expect(user.total_submit).toBe(5);  // Not 1!
+const count = await db.submissions.count({ user_id: userId });
+expect(count).toBe(5);  // Not fewer
 ```
 
 **Severity:** 🔴 CRITICAL
@@ -568,8 +566,8 @@ expect(viewer.code).toBe(originalCode);
 **Biện pháp:**
 - ✅ JWT signature verification
 - ✅ Check role từ DATABASE (not just JWT)
-- ✅ Add `iat` claim, check against role change
-- ✅ Short-lived token (1h) + refresh token
+- ✅ Add `auth_version` claim, compare with DB/cache on protected requests
+- ✅ Short-lived access token (15m) + refresh token
 
 **Test:**
 ```javascript
@@ -586,20 +584,18 @@ expect(dbRole).toBe("Coder");
 ---
 
 ### Risk 3: Concurrent Insert Race ↔ Edge Case #9
-**Ảnh hưởng:** 🔴 CRITICAL - User stats inconsistent
+**Ảnh hưởng:** 🔴 CRITICAL - Submission data inconsistent
 
 **Biện pháp:**
 - ✅ Atomic transaction
-- ✅ Database ATOMIC INCREMENT
-- ✅ Sequence/counter
+- ✅ Idempotent submission creation
+- ✅ No derived counter field required
 
 **Code:**
 ```sql
-UPDATE users SET total_submit = total_submit + 1 WHERE id = ?;
-
 BEGIN;
   INSERT INTO submissions (...);
-  UPDATE users SET total_submit = total_submit + 1;
+  INSERT INTO execution_results (...);
 COMMIT;
 ```
 

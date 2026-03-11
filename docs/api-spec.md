@@ -1,7 +1,7 @@
 # API SPECIFICATION
 
 **Base URL:** `/api`  
-**Auth:** Bearer JWT Token  
+**Auth:** Bearer access token (JWT). Refresh token handled via dedicated auth endpoints.  
 **Content-Type:** `application/json`
 
 ---
@@ -27,9 +27,18 @@
 
 All protected endpoints require:
 ```
-Authorization: Bearer <jwt_token>
+Authorization: Bearer <access_token>
 ```
 Public endpoints are marked with 🔓. All others require 🔒.
+
+### Protected-Route Auth Validation
+
+For every protected request, auth middleware must:
+1. Verify access token signature and expiry
+2. Load current user auth state (`is_active`, `deleted_at`, `auth_version`) from DB or a trusted cache backed by DB
+3. Reject if user is locked, soft-deleted, or token `auth_version` does not match the current stored value
+
+This makes role changes, password changes, and account deactivation effective immediately.
 
 ### Pagination
 
@@ -274,8 +283,10 @@ POST /api/auth/login
   "success": true,
   "data": {
     "access_token": "eyJhbGciOiJIUzI1NiIs...",
+    "refresh_token": "rft_opaque_token_here",
     "token_type": "Bearer",
-    "expires_in": 86400,
+    "expires_in": 900,
+    "refresh_expires_in": 2592000,
     "user": {
       "user_id": "550e8400-e29b-41d4-a716-446655440000",
       "email": "user@example.com",
@@ -297,9 +308,99 @@ POST /api/auth/login
 
 **Notes:**
 - Does NOT reveal if email exists (same error for wrong email / wrong password)
-- JWT payload: `{ user_id, email, role, iat, exp }`
-- Token expiry: 24 hours
+- Access token payload: `{ user_id, email, role, auth_version, iat, exp }`
+- Access token expiry: 15 minutes
+- Refresh token expiry: 30 days
+- Refresh token is rotated on every successful refresh
 - Rate limit: max 5 failed attempts per 5 minutes per IP
+
+**User Story:** US02
+
+---
+
+### 2.5 Refresh Access Token
+
+🔓 **Public**
+
+```
+POST /api/auth/refresh
+```
+
+**Request Body:**
+
+| Field | Type | Required |
+|-------|------|----------|
+| `refresh_token` | string | ✅ |
+
+```json
+{
+  "refresh_token": "rft_opaque_token_here"
+}
+```
+
+**Response:** `200 OK`
+```json
+{
+  "success": true,
+  "data": {
+    "access_token": "eyJhbGciOiJIUzI1NiIs...",
+    "refresh_token": "rft_rotated_token_here",
+    "token_type": "Bearer",
+    "expires_in": 900,
+    "refresh_expires_in": 2592000
+  }
+}
+```
+
+**Errors:**
+
+| Status | Code | When |
+|--------|------|------|
+| 401 | `INVALID_REFRESH_TOKEN` | Token invalid, revoked, or expired |
+| 403 | `ACCOUNT_LOCKED` | Account disabled |
+
+**Notes:**
+- Refresh token rotation invalidates the previous token after use
+- If refresh token reuse is detected, all active refresh tokens for that user are revoked
+- Refresh handler also checks current user `auth_version`, `is_active`, and `deleted_at`
+
+**User Story:** US02
+
+---
+
+### 2.6 Logout
+
+🔒 **All Roles**
+
+```
+POST /api/auth/logout
+```
+
+**Request Body:**
+
+| Field | Type | Required |
+|-------|------|----------|
+| `refresh_token` | string | ✅ |
+
+```json
+{
+  "refresh_token": "rft_rotated_token_here"
+}
+```
+
+**Response:** `200 OK`
+```json
+{
+  "success": true,
+  "data": {
+    "message": "Logged out successfully"
+  }
+}
+```
+
+**Notes:**
+- Revokes the provided refresh token
+- Frontend should also discard the current access token
 
 **User Story:** US02
 
@@ -348,7 +449,8 @@ PATCH /api/me
 | Field | Type | Validation |
 |-------|------|------------|
 | `display_name` | string | Max 50 chars |
-| `password` | string | Same rules as register |
+| `current_password` | string | Required if `new_password` is provided |
+| `new_password` | string | Same rules as register |
 
 ```json
 {
@@ -372,7 +474,8 @@ PATCH /api/me
 
 **Notes:**
 - Cannot change email or role through this endpoint
-- Password change requires current password verification (future enhancement)
+- Password change requires current password verification
+- Successful password change increments `auth_version` and revokes all active refresh tokens for the user
 
 **User Story:** US01
 
@@ -470,6 +573,10 @@ PATCH /api/admin/users/:user_id/role
 | 404 | `USER_NOT_FOUND` | User ID doesn't exist |
 | 422 | `CANNOT_DEMOTE_SELF` | Admin trying to remove own admin role |
 
+**Notes:**
+- Changing role increments the user's `auth_version`
+- Existing refresh tokens for that user are revoked so permissions take effect immediately
+
 **User Story:** US03
 
 ---
@@ -506,6 +613,10 @@ PATCH /api/admin/users/:user_id/status
 }
 ```
 
+**Notes:**
+- Locking an account revokes all active refresh tokens for that user
+- Access tokens become invalid after the next auth check because `auth_version` changes
+
 **User Story:** US03
 
 ---
@@ -534,6 +645,11 @@ DELETE /api/admin/users/:user_id
 |--------|------|------|
 | 404 | `USER_NOT_FOUND` | User ID doesn't exist |
 | 422 | `CANNOT_DELETE_SELF` | Admin trying to delete own account |
+
+**Notes:**
+- This endpoint performs a logical delete: sets `deleted_at`, sets `is_active=false`, increments `auth_version`, and revokes all active refresh tokens
+- Historical submissions, authored questions, and session history remain intact
+- Active sessions owned by the deleted user must be closed immediately by the backend
 
 **User Story:** US03
 
@@ -899,7 +1015,7 @@ DELETE /api/admin/test_cases/:test_case_id
 POST /api/submissions/run
 ```
 
-**Description:** Execute code with custom input. No grading. Results not counted as formal submission against a question.
+**Description:** Execute code with custom input. No grading. Results not counted as formal submission against a question. Execution is asynchronous.
 
 **Request Body:**
 
@@ -917,31 +1033,18 @@ POST /api/submissions/run
 }
 ```
 
-**Response:** `200 OK`
+**Response:** `202 Accepted`
 ```json
 {
   "success": true,
   "data": {
     "submission_id": "sub-uuid-...",
     "type": "RUN",
-    "status": "ACCEPTED",
-    "stdout": "15\n",
-    "stderr": "",
-    "execution_time": "0.032",
-    "memory_used": "3.2"
+    "status": "PENDING",
+    "poll_url": "/api/submissions/sub-uuid-..."
   }
 }
 ```
-
-**Error status values in response** (HTTP remains 200 — execution itself succeeded):
-
-| Status | Description |
-|--------|-------------|
-| `ACCEPTED` | Code ran successfully |
-| `COMPILATION_ERROR` | Compile failed — `stderr` contains compiler message |
-| `RUNTIME_ERROR` | Crash — `stderr` contains error info |
-| `TIME_LIMIT_EXCEEDED` | Exceeded 10s wall time |
-| `MEMORY_LIMIT_EXCEEDED` | Exceeded 256MB memory |
 
 **HTTP Errors:**
 
@@ -953,6 +1056,7 @@ POST /api/submissions/run
 **Notes:**
 - Creates a `submissions` record (type=RUN) + 1 `execution_results` record
 - Judge0 constraints: wall-time 10s, memory 256MB, output 100KB
+- Client receives final result via `GET /api/submissions/:submission_id` or WebSocket event `execution_completed`
 
 **User Story:** US06, US07
 
@@ -966,7 +1070,7 @@ POST /api/submissions/run
 POST /api/submissions/submit
 ```
 
-**Description:** Submit code against a question. Runs all test cases (public + hidden), compares output, and returns aggregated result.
+**Description:** Submit code against a question. Runs all test cases (public + hidden), compares output, and returns aggregated result asynchronously.
 
 **Request Body:**
 
@@ -984,45 +1088,15 @@ POST /api/submissions/submit
 }
 ```
 
-**Response:** `200 OK`
+**Response:** `202 Accepted`
 ```json
 {
   "success": true,
   "data": {
     "submission_id": "sub-uuid-...",
     "type": "SUBMIT",
-    "overall_status": "WRONG_ANSWER",
-    "passed_count": 5,
-    "total_count": 8,
-    "test_results": [
-      {
-        "test_case_id": "tc-uuid-1",
-        "is_hidden": false,
-        "status": "ACCEPTED",
-        "expected_output": "15",
-        "actual_output": "15",
-        "execution_time": "0.032",
-        "memory_used": "3.2"
-      },
-      {
-        "test_case_id": "tc-uuid-2",
-        "is_hidden": false,
-        "status": "WRONG_ANSWER",
-        "expected_output": "0",
-        "actual_output": "-1",
-        "execution_time": "0.028",
-        "memory_used": "3.1"
-      },
-      {
-        "test_case_id": "tc-uuid-3",
-        "is_hidden": true,
-        "status": "ACCEPTED",
-        "expected_output": "[hidden]",
-        "actual_output": "[hidden]",
-        "execution_time": "0.045",
-        "memory_used": "3.3"
-      }
-    ]
+    "overall_status": "PENDING",
+    "poll_url": "/api/submissions/sub-uuid-..."
   }
 }
 ```
@@ -1057,6 +1131,8 @@ Priority: COMPILATION_ERROR > RUNTIME_ERROR > TIME_LIMIT_EXCEEDED > MEMORY_LIMIT
 - Creates 1 `submissions` record (type=SUBMIT) + N `execution_results` records
 - Uses question's `time_limit` and `memory_limit` (not global defaults)
 - Output comparison: trim trailing whitespace/newlines
+- Client receives progress via `grading_progress` and final detail via `GET /api/submissions/:submission_id` or `grading_completed`
+- Submission stores question/test snapshots so old history remains stable after content edits or deletes
 
 **User Story:** US12, US12.1
 
@@ -1108,6 +1184,7 @@ GET /api/submissions
 - Only returns current user's submissions
 - Default sort: `created_at DESC` (newest first)
 - `question` is null for free runs without question context
+- If the original question was later deleted, `question.title` is served from submission snapshot data
 
 **User Story:** US09
 
@@ -1149,7 +1226,9 @@ GET /api/submissions/:submission_id
         "memory_used": "3.2"
       }
     ],
-    "created_at": "2025-03-10T12:00:00Z"
+    "created_at": "2025-03-10T12:00:00Z",
+    "started_at": "2025-03-10T12:00:01Z",
+    "completed_at": "2025-03-10T12:00:03Z"
   }
 }
 ```
@@ -1164,6 +1243,7 @@ GET /api/submissions/:submission_id
 **Notes:**
 - For `type=RUN`: `execution_results` has 1 item with `stdin` = custom input, no `expected_output`
 - For `type=SUBMIT`: hidden test case results have masked `stdin`, `stdout`, `expected_output`
+- Historical detail is based on snapshot data stored at grading time, so edits/deletes to questions or test cases do not alter old submissions
 
 **User Story:** US09, US12.1
 
@@ -1258,6 +1338,7 @@ POST /api/sessions
     "session_id": "ses-uuid-...",
     "coder_id": "550e8400-...",
     "status": "ACTIVE",
+    "current_version": 0,
     "join_url": "/session/ses-uuid-...",
     "websocket_url": "wss://api.example.com/ws/session/ses-uuid-...",
     "created_at": "2025-03-10T12:00:00Z"
@@ -1294,6 +1375,7 @@ GET /api/sessions/:session_id
     "status": "ACTIVE",
     "current_code": "print('hello')",
     "current_language_id": 71,
+    "current_version": 42,
     "viewers": [
       {
         "user_id": "viewer-uuid-...",
@@ -1317,6 +1399,7 @@ GET /api/sessions/:session_id
 **Notes:**
 - `current_code` provides the latest snapshot for late-joining viewers
 - Viewer connects to `websocket_url` after this call
+- Session is public-by-link for authenticated users with role `VIEWER`, `CODER`, or `ADMIN`
 
 **User Story:** US14.1
 
@@ -1353,7 +1436,7 @@ PATCH /api/sessions/:session_id/close
 ## 10. WebSocket Events
 
 **Connection URL:** `wss://api.example.com/ws/session/:session_id`  
-**Auth:** Query param `?token=<jwt_token>`  
+**Auth:** Query param `?token=<access_token>`  
 **Protocol:** Socket.IO
 
 ### 10.1 Client → Server Events
@@ -1408,7 +1491,7 @@ Sent by **Coder only** when code is modified. Debounced at 300ms on client side.
 ```
 
 **Notes:**
-- Server updates `sessions.current_code` and `sessions.current_language_id`
+- Server updates `sessions.current_code`, `sessions.current_language_id`, `sessions.current_version`, and `sessions.last_activity_at`
 - Server broadcasts `code_updated` to all viewers
 - If sender is not the session's coder → server ignores (read-only enforcement)
 

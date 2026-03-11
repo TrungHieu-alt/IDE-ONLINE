@@ -65,11 +65,19 @@ ACCEPTANCE CRITERIA:
   - Tìm user theo email (case-insensitive)
   - Verify password bằng bcrypt.compare()
 
-- [ ] Thành công → Trả về JWT token
-  - Token payload: `{user_id, email, role, iat, exp}`
-  - Token expiry: 24 giờ
+- [ ] Thành công → Trả về access token + refresh token
+  - Access token payload: `{user_id, email, role, auth_version, iat, exp}`
+  - Access token expiry: 15 phút
+  - Đồng thời trả về refresh token opaque
+  - Refresh token expiry: 30 ngày
   - HTTP `200 OK`
-  - Response: `{access_token, token_type: "Bearer", expires_in: 86400, user: {...}}`
+  - Response: `{access_token, refresh_token, token_type: "Bearer", expires_in: 900, refresh_expires_in: 2592000, user: {...}}`
+
+- [ ] Remember session bằng refresh token rotation
+  - Endpoint: `POST /api/auth/refresh`
+  - Refresh token hợp lệ → cấp access token mới + refresh token mới
+  - Refresh token cũ bị revoke ngay sau khi rotate
+  - Logout → revoke refresh token
 
 - [ ] Thất bại → Trả về lỗi xác thực rõ ràng
   - Email không tồn tại → `401 Unauthorized`
@@ -252,24 +260,24 @@ ACCEPTANCE CRITERIA:
   1. User nhấn "Run" button
   2. Frontend gửi: `POST /api/submissions/run`
   3. Body: `{source_code, language_id, stdin}`
-  4. Backend gửi request đến Judge0
-  5. Kết quả: stdout, stderr, status, time, memory
+  4. Backend tạo submission status `PENDING`, gửi request đến Judge0
+  5. API trả về ngay: `{submission_id, status: "PENDING"}`
+  6. Frontend poll submission detail hoặc nhận WebSocket event
+  7. Kết quả cuối: stdout, stderr, status, time, memory
 
 - [ ] Execution constraints:
   - Max time: 10 giây (wall-time)
   - Max memory: 256 MB
   - Nếu vượt → return `TIME_LIMIT_EXCEEDED` hoặc `MEMORY_LIMIT_EXCEEDED`
 
-- [ ] Response format (thành công):
+- [ ] Initial response format:
   ```json
   {
-    "status": "success",
-    "execution": {
-      "status": "Accepted",
-      "stdout": "15\n",
-      "stderr": "",
-      "execution_time": "0.123s",
-      "memory_used": "5.2MB"
+    "success": true,
+    "data": {
+      "submission_id": "sub-uuid",
+      "type": "RUN",
+      "status": "PENDING"
     }
   }
   ```
@@ -338,9 +346,11 @@ ACCEPTANCE CRITERIA:
   2. Frontend gửi: `POST /api/submissions/submit`
   3. Body: `{question_id, source_code, language_id}`
   4. Backend fetch câu hỏi + tất cả test cases (public + hidden)
-  5. Run code với mỗi test case
-  6. So sánh output với expected output
-  7. Aggregate kết quả
+  5. Backend tạo submission `PENDING` và queue grading
+  6. API trả về ngay `submission_id`
+  7. Run code với mỗi test case
+  8. So sánh output với expected output
+  9. Aggregate kết quả
 
 - [ ] Execute tất cả test cases:
   - Public test cases (visible output)
@@ -355,17 +365,17 @@ ACCEPTANCE CRITERIA:
   - Nếu có bất kỳ runtime error → `RUNTIME_ERROR` ❌
   - Nếu compile error → `COMPILATION_ERROR` ❌
 
-- [ ] Result format:
+- [ ] Final result format:
   ```json
   {
-    "overall_status": "Wrong Answer",
+    "overall_status": "WRONG_ANSWER",
     "passed_count": 5,
     "total_count": 8,
     "test_results": [
       {
         "test_case_id": "tc1",
         "is_hidden": false,
-        "status": "Accepted",
+        "status": "ACCEPTED",
         "expected_output": "15",
         "actual_output": "15",
         "execution_time": "0.12s"
@@ -433,9 +443,8 @@ ACCEPTANCE CRITERIA:
 - [ ] Question structure:
   - `title`: required, max 200 chars, min 5 chars
   - `description`: markdown, required, max 5000 chars
+    - Bao gồm problem statement, sample input, sample output, notes nếu có
   - `difficulty`: enum (EASY / MEDIUM / HARD)
-  - `sample_input`: optional, max 1000 chars
-  - `sample_output`: optional, max 1000 chars
   - `time_limit`: 1-10 seconds (default 1)
   - `memory_limit`: 32-256 MB (default 64)
   - `is_published`: boolean (default false)
@@ -451,7 +460,7 @@ ACCEPTANCE CRITERIA:
   - Client render markdown properly
 
 - [ ] Sample input/output:
-  - Optional nhưng recommended
+  - Nhúng trực tiếp trong `description` dưới dạng markdown/code block
   - Displayed to coder trước khi code
   - NOT used for grading
 
@@ -555,7 +564,7 @@ ACCEPTANCE CRITERIA:
   - User authenticated: `401 Unauthorized` if not logged in
 
 - [ ] Permission check:
-  - VIEWER role required (or ADMIN/CODER)
+  - Session public-by-link cho user đã đăng nhập có role VIEWER, CODER hoặc ADMIN
   - Return: `403` if permission denied
 
 - [ ] Join response:
