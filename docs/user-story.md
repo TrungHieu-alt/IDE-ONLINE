@@ -262,7 +262,7 @@ ACCEPTANCE CRITERIA:
   3. Body: `{source_code, language_id, stdin}`
   4. Backend tạo submission status `PENDING`, gửi request đến Judge0
   5. API trả về ngay: `{submission_id, status: "PENDING"}`
-  6. Frontend poll submission detail hoặc nhận WebSocket event
+  6. Frontend chờ WebSocket event để nhận trạng thái và kết quả
   7. Kết quả cuối: stdout, stderr, status, time, memory
 
 - [ ] Execution constraints:
@@ -638,17 +638,17 @@ ACCEPTANCE CRITERIA:
 
 - [ ] Result broadcast:
   - After completion → `execution_completed` event
-  - Payload: status, stdout, stderr, time, memory
+  - Payload: `submission_id`, status, stdout, stderr, time, memory
   - Viewer sees: ✅ ACCEPTED, stdout, time, memory
 
 - [ ] Test case results (Submit):
   - When coder submit → broadcast: `grading_progress`
-  - Payload: `{completed: 5, total: 8}`
+  - Payload: `{submission_id, completed: 5, total: 8}`
   - Viewer sees: "Grading 5/8 test cases..."
 
 - [ ] Final result broadcast:
   - Event: `grading_completed`
-  - Payload: full grading result table
+  - Payload: `submission_id` + full grading result table
   - Viewer sees: test results với passed/failed
 
 - [ ] Viewer UI update:

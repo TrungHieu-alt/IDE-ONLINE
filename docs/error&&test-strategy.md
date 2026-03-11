@@ -231,7 +231,7 @@ COMMIT;
 **Judge0 Callback Race:**
 - Submit code → Judge0 token = "abc"
 - Judge0 processing, callback sắp về
-- Polling timeout xảy ra
+- Callback/webhook từ Judge0 bị chậm hoặc tạm thời chưa tới
 - Judge0 callback đến TRƯỚC DB insert hoàn tất
 - Callback handler: kiểm tra submission có tồn tại không? Nếu không → queue for retry
 - Verify: không duplicate result, không lost result
@@ -302,7 +302,7 @@ setTimeout(() => {
 | Judge0 timeout (30s) | Retry 3x (1s→2s→4s), nếu vẫn fail → SYSTEM_ERROR |
 | Judge0 return 5xx | Retry exponential backoff, queue for async retry |
 | Judge0 queue full | Submission queue ở backend, wait hoặc reject? (define clear!) |
-| WebSocket disconnect | Client reconnect auto với backoff, viewer thấy "Mất kết nối" |
+| WebSocket disconnect | Client reconnect auto với backoff, resubscribe session/submission stream, viewer thấy "Mất kết nối" |
 | Database slow (> 5s) | Timeout, retry safe operation, error message |
 
 **Health Check:**

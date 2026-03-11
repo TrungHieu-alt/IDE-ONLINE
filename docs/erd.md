@@ -292,7 +292,7 @@ Individual execution results. One row per run against custom input or per test c
 | `status` | ENUM | NOT NULL, default `'PENDING'` | Same enum as `overall_status` |
 | `execution_time` | DECIMAL(10,4) | nullable | Seconds |
 | `memory_used` | DECIMAL(10,2) | nullable | MB |
-| `judge0_token` | VARCHAR(255) | nullable | Judge0 submission token for polling |
+| `judge0_token` | VARCHAR(255) | nullable | Judge0 submission token for callback/webhook correlation |
 | `created_at` | TIMESTAMP | NOT NULL | Execution time |
 | `expected_output_snapshot` | TEXT | nullable | Frozen expected output for historical grading detail |
 | `is_hidden_snapshot` | BOOLEAN | nullable | Frozen hidden/public flag |
@@ -301,7 +301,7 @@ Individual execution results. One row per run against custom input or per test c
 **Indexes:**
 - `INDEX idx_exec_results_submission ON execution_results(submission_id)`
 - `INDEX idx_exec_results_test_case ON execution_results(test_case_id)`
-- `UNIQUE INDEX idx_exec_results_judge0_token ON execution_results(judge0_token)` — idempotent Judge0 polling/callback correlation
+- `UNIQUE INDEX idx_exec_results_judge0_token ON execution_results(judge0_token)` — idempotent Judge0 callback/webhook correlation
 
 **Relationship Rules:**
 - If `type = RUN` → exactly **1** execution_result with `test_case_id = NULL`, `stdin = custom input`
@@ -458,9 +458,10 @@ When a viewer joins late, they need the latest code snapshot. Instead of replayi
 1. INSERT submissions (type=RUN, question_id=NULL, source_code=..., language_id=71)
 2. Send to Judge0 → get token
 3. INSERT execution_results (submission_id=..., test_case_id=NULL, stdin="5 10", judge0_token=...)
-4. Poll Judge0 → get result
+4. Judge0 callback/webhook returns result
 5. UPDATE execution_results (stdout="15", status=ACCEPTED, execution_time=0.05)
 6. UPDATE submissions (overall_status=ACCEPTED)
+7. Emit WebSocket event `execution_completed`
 ```
 
 ### Flow 2: Submit (Click "Submit")
@@ -470,11 +471,12 @@ When a viewer joins late, they need the latest code snapshot. Instead of replayi
 3. For EACH test case:
    a. Send to Judge0 (stdin = test_case.input) → get token
    b. INSERT execution_results (submission_id=..., test_case_id=tc.id, judge0_token=...)
-4. Poll Judge0 for all tokens → get results
+4. Judge0 callback/webhook returns results for all tokens
 5. UPDATE each execution_results (stdout, status, time, memory)
 6. Compare: actual_output vs test_case.expected_output
 7. Aggregate: passed_count=4, total_count=5
 8. UPDATE submissions (overall_status=WRONG_ANSWER, passed_count=4, total_count=5)
+9. Emit WebSocket events `grading_progress` and `grading_completed`
 ```
 
 ---

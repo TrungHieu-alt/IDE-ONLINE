@@ -1041,7 +1041,7 @@ POST /api/submissions/run
     "submission_id": "sub-uuid-...",
     "type": "RUN",
     "status": "PENDING",
-    "poll_url": "/api/submissions/sub-uuid-..."
+    "ws_event": "execution_completed"
   }
 }
 ```
@@ -1056,7 +1056,7 @@ POST /api/submissions/run
 **Notes:**
 - Creates a `submissions` record (type=RUN) + 1 `execution_results` record
 - Judge0 constraints: wall-time 10s, memory 256MB, output 100KB
-- Client receives final result via `GET /api/submissions/:submission_id` or WebSocket event `execution_completed`
+- Client receives final result via WebSocket event `execution_completed`
 
 **User Story:** US06, US07
 
@@ -1096,7 +1096,7 @@ POST /api/submissions/submit
     "submission_id": "sub-uuid-...",
     "type": "SUBMIT",
     "overall_status": "PENDING",
-    "poll_url": "/api/submissions/sub-uuid-..."
+    "ws_events": ["grading_progress", "grading_completed"]
   }
 }
 ```
@@ -1131,7 +1131,7 @@ Priority: COMPILATION_ERROR > RUNTIME_ERROR > TIME_LIMIT_EXCEEDED > MEMORY_LIMIT
 - Creates 1 `submissions` record (type=SUBMIT) + N `execution_results` records
 - Uses question's `time_limit` and `memory_limit` (not global defaults)
 - Output comparison: trim trailing whitespace/newlines
-- Client receives progress via `grading_progress` and final detail via `GET /api/submissions/:submission_id` or `grading_completed`
+- Client receives progress via `grading_progress` and final detail via `grading_completed`
 - Submission stores question/test snapshots so old history remains stable after content edits or deletes
 
 **User Story:** US12, US12.1
@@ -1439,6 +1439,8 @@ PATCH /api/sessions/:session_id/close
 **Auth:** Query param `?token=<access_token>`  
 **Protocol:** Socket.IO
 
+This same WebSocket connection is also used to stream execution and grading events for the active session.
+
 ### 10.1 Client → Server Events
 
 #### `join_session`
@@ -1579,6 +1581,7 @@ Broadcast when Run execution finishes.
 {
   "event": "execution_completed",
   "data": {
+    "submission_id": "sub-uuid-...",
     "status": "ACCEPTED",
     "stdout": "15\n",
     "stderr": "",
@@ -1587,6 +1590,10 @@ Broadcast when Run execution finishes.
   }
 }
 ```
+
+**Notes:**
+- Sent to the coder and all viewers in the session
+- Frontend uses `submission_id` to match the pending run request
 
 ---
 
@@ -1598,6 +1605,7 @@ Broadcast during Submit — sent after each test case completes.
 {
   "event": "grading_progress",
   "data": {
+    "submission_id": "sub-uuid-...",
     "completed": 5,
     "total": 8
   }
@@ -1614,12 +1622,16 @@ Broadcast when all test cases finish.
 {
   "event": "grading_completed",
   "data": {
+    "submission_id": "sub-uuid-...",
     "overall_status": "WRONG_ANSWER",
     "passed_count": 5,
     "total_count": 8
   }
 }
 ```
+
+**Notes:**
+- Final grading payload is delivered over WebSocket; `GET /api/submissions/:submission_id` remains available for history/detail views
 
 ---
 

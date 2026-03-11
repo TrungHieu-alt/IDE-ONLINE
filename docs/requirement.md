@@ -46,7 +46,7 @@ Platform cho phép người dùng viết code online với nhiều ngôn ngữ l
 | ID | Requirement | Description |
 |----|-------------|-------------|
 | **F1** | Code Editor | Web-based editor (Monaco) với syntax highlight cho 9 ngôn ngữ. Support chọn ngôn ngữ từ dropdown. |
-| **F2** | Code Execution | User click **Run/Submit** → backend tạo submission async, gửi code đến Judge0, trả về `submission_id` ngay và client theo dõi kết quả qua polling/WebSocket |
+| **F2** | Code Execution | User click **Run/Submit** → backend tạo submission async, gửi code đến Judge0, trả về `submission_id` ngay và client nhận tiến trình/kết quả qua WebSocket |
 | **F3** | Realtime Sync | Coder gõ code → Viewer thấy live realtime (1 chiều, debounce 300ms) |
 | **F4** | Question Management | Admin tạo/sửa/xóa câu hỏi (title, description markdown; sample input/output được nhúng trong description) |
 | **F5** | Test Case Management | Admin tạo hidden test case, hệ thống auto-compare output vs expected |
@@ -175,7 +175,7 @@ Platform cho phép người dùng viết code online với nhiều ngôn ngữ l
 ## 15. SUCCESS CRITERIA
 
 ✅ User đăng ký, verify email, login, refresh session, chọn câu hỏi  
-✅ Viết code, click Run/Submit, nhận `submission_id` ngay và theo dõi kết quả async  
+✅ Viết code, click Run/Submit, nhận `submission_id` ngay và theo dõi kết quả async qua WebSocket  
 ✅ Realtime sync code Coder → Viewer realtime  
 ✅ Admin tạo test case, auto-grade submission  
 ✅ Isolation: Code user A không truy cập user B  
