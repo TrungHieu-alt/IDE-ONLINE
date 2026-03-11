@@ -16,21 +16,33 @@ Platform cho phép người dùng viết code online với nhiều ngôn ngữ l
 
 ## 2. PROJECT SCOPE
 
-### In Scope ✅
-- **Code Editor**: Monaco Editor với syntax highlighting các ngôn ngữ (C, C++, JavaScript, TypeScript, Java, C#, Python, PHP, Dart)
-- **Code Execution**: Tích hợp Judge0 (selfhost) để compile & run code trong sandbox
-- **Realtime Collaboration**: Coder viết code → Viewer xem live (1 chiều)
-- **Question & Test Case Management**: Admin tạo câu hỏi + test case, auto-grading
-- **User Management**: Register/Login, RBAC (Admin/Coder/Viewer)
-- **Submission History**: Lưu history: code, input, output, status, timestamp
+### 2.1. Scope of Work (Công việc cần làm)
 
-### Out of Scope ❌
-- Mobile app (chỉ web)
-- Video/Audio integration
-- AI code suggestion
-- Code formatting/beautify
-- Ranking
+| In Scope ✅ | Out of Scope ❌ |
+|---|---|
+| Thiết kế hệ thống (ERD, API spec, C4) | Hạ tầng production (AWS, domain, SSL) |
+| Phát triển Frontend & Backend | Bảo trì sau MVP |
+| Kiểm thử & QA | Hỗ trợ kỹ thuật 24/7 |
+| Demo | Ứng dụng Mobile |
+| Setup local deployment (Docker) | Multi-region |
 
+
+---
+
+### 2.2. Functional Scope (Features)
+
+| Functional Requirements | Non-Functional Requirements |
+|---|---|
+| F1-F10: Code editor, execution, realtime, questions, auth, history, dashboard | NFR1-NFR9: Isolation, latency, concurrency, performance targets |
+
+---
+
+### 2.3. Deliverables (Output cụ thể)
+
+- **Source Code** - Frontend + Backend repo
+- **Design Docs** - ERD, API spec, C4 diagram
+- **Test Evidence** - Unit, Integration, E2E, Security test reports
+- **Deployment Manual** - Docker, Database setup guide
 ---
 
 ## 3. STAKEHOLDER
@@ -199,6 +211,7 @@ Platform cho phép người dùng viết code online với nhiều ngôn ngữ l
 **Document Owner:** Project Team  
 **Last Updated:** March 2026  
 **Review Date:** TBD
+
 
 
 
