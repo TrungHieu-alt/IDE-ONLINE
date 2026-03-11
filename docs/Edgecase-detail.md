@@ -37,7 +37,7 @@
 | # | Tên Edge Case | Nhóm | Severity | Ảnh Hưởng | Test Priority |
 |---|---------------|------|----------|-----------|---------------|
 | 1 | Output có thừa whitespace | Execution | 🟡 HIGH | WA sai không công bằng | Tuần 1 |
-| 2 | Floating point precision | Execution | 🔴 CRITICAL | WA sai (bài khoa học) | Tuần 1 |
+| 2 | Floating point precision (future tolerant judging) | Execution | 🟢 LOW | Không áp dụng cho MVP hiện tại | Future |
 | 3 | Output quá dài (>100KB) | Execution | 🔴 CRITICAL | Crash hệ thống / vượt giới hạn output | Tuần 1 |
 | 4 | Timeout boundary (9.9s vs 10.1s) | Execution | 🟡 HIGH | Công bằng điểm | Tuần 1 |
 | 5 | Event out-of-order | Realtime | 🔴 CRITICAL | Viewer thấy sai code | Tuần 1 |
@@ -53,8 +53,7 @@
 
 ## 1.2 Summary by Severity
 
-### 🔴 CRITICAL (8 cases)
-- #2: Floating point precision
+### 🔴 CRITICAL (7 cases)
 - #3: Output quá dài
 - #5: Event out-of-order
 - #6: Duplicate event
@@ -69,12 +68,15 @@
 - #7: Out-of-sync checksum
 - #8: Network disconnect
 
+### 🟢 LOW / FUTURE (1 case)
+- #2: Floating point precision (only if product later enables tolerant judging)
+
 ---
 
 ## 1.3 Test Roadmap
 
-### Tuần 1: CRITICAL (8 cases)
-- [ ] #2, #3 (Output validation)
+### Tuần 1: CRITICAL (7 cases)
+- [ ] #3 (Output validation)
 - [ ] #5, #6 (Realtime ordering & dedup)
 - [ ] #9, #10 (Database race condition)
 - [ ] #11, #12 (Security)
@@ -82,6 +84,9 @@
 ### Tuần 2: HIGH (4 cases)
 - [ ] #1, #4 (Execution edge case)
 - [ ] #7, #8 (Realtime resilience)
+
+### Future / Out of Scope for MVP
+- [ ] #2 (Floating point tolerant judging)
 
 ---
 
@@ -111,7 +116,7 @@ expect(normalizeOutput("42 \n")).toBe("42");
 
 ---
 
-#### 2. Floating point precision (CRITICAL / only if product later enables tolerant judging)
+#### 2. Floating point precision (LOW / future only if product later enables tolerant judging)
 **Vấn đề:** Bài khoa học: 1/3 → expected "0.3333333333", code output "0.3333333334"
 
 ```python
@@ -136,7 +141,7 @@ const output = 0.3333333334;
 expect(floatCompare(expected, output, 1e-6)).toBe(true);
 ```
 
-**Severity:** 🔴 CRITICAL
+**Severity:** 🟢 LOW (future scope, not MVP)
 
 **Lưu ý hiện tại:** Core API hiện chỉ define output compare theo exact match sau khi trim trailing whitespace/newlines. Nếu giữ rule này cho MVP, edge case này là một quyết định sản phẩm tương lai chứ không phải behavior hiện tại.
 

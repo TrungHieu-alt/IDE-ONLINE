@@ -76,6 +76,7 @@ ACCEPTANCE CRITERIA:
 - [ ] Remember session bằng refresh token rotation
   - Endpoint: `POST /api/auth/refresh`
   - Refresh token hợp lệ → cấp access token mới + refresh token mới
+  - Nếu access token hiện tại chưa hết hạn mà vẫn gọi `/refresh` → vẫn accept và rotate bình thường
   - Refresh token cũ bị revoke ngay sau khi rotate
   - Logout → revoke refresh token
 
@@ -117,6 +118,7 @@ ACCEPTANCE CRITERIA:
 - [ ] Permission matrix rõ ràng:
   - ADMIN: tất cả endpoints
   - CODER: viết code, run, submit, xem lịch sử riêng
+  - CODER có thể join session public-by-link của coder khác với quyền read-only
   - VIEWER: xem code realtime (trong session), NOT edit
 
 - [ ] Endpoint gán role: `PATCH /api/admin/users/{user_id}/role`
@@ -360,10 +362,12 @@ ACCEPTANCE CRITERIA:
 
 - [ ] Overall status determination:
   - Nếu ALL PASS → `ACCEPTED` ✅
-  - Nếu some fail → `WRONG_ANSWER` ⚠️
   - Nếu có bất kỳ time limit exceeded → `TIME_LIMIT_EXCEEDED` ⏱️
+  - Nếu có bất kỳ memory limit exceeded → `MEMORY_LIMIT_EXCEEDED` ⏱️
   - Nếu có bất kỳ runtime error → `RUNTIME_ERROR` ❌
   - Nếu compile error → `COMPILATION_ERROR` ❌
+  - Nếu không có lỗi compile/runtime/resource nhưng output sai → `WRONG_ANSWER` ⚠️
+  - Priority rule: `COMPILATION_ERROR` > `RUNTIME_ERROR` > `TIME_LIMIT_EXCEEDED` > `MEMORY_LIMIT_EXCEEDED` > `WRONG_ANSWER` > `ACCEPTED`
 
 - [ ] Final result format:
   ```json
@@ -534,10 +538,11 @@ ACCEPTANCE CRITERIA:
   - `created_at`, `ended_at`
 
 - [ ] Session lifecycle:
-  - Active = coder connected
+  - Active = coder connected hoặc tạm mất kết nối nhưng chưa quá grace period
   - Multiple viewers can join
-  - Auto-closes 5 min after coder disconnect
-  - Coder can manually close
+  - Nếu coder reconnect trong vòng 5 phút sau disconnect → session tiếp tục, giữ nguyên code hiện tại
+  - Nếu coder không quay lại sau 5 phút → auto-close
+  - Coder có thể manually close bất kỳ lúc nào
 
 - [ ] Sharing:
   - Display session link prominently
@@ -565,6 +570,7 @@ ACCEPTANCE CRITERIA:
 
 - [ ] Permission check:
   - Session public-by-link cho user đã đăng nhập có role VIEWER, CODER hoặc ADMIN
+  - Nếu user là coder khác tham gia bằng link → chỉ có quyền read-only như viewer
   - Return: `403` if permission denied
 
 - [ ] Join response:
@@ -620,7 +626,7 @@ ACCEPTANCE CRITERIA:
 - [ ] Handle disconnections:
   - Network drop: show spinner, auto-reconnect every 3s
   - Max retry: 10 times
-  - Reconnect: catch up with latest code snapshot
+  - Reconnect: request missed events from last known version; nếu buffer không còn đủ thì fallback về latest snapshot
 
 ---
 
@@ -661,22 +667,22 @@ ACCEPTANCE CRITERIA:
 
 ## 📊 HISTORY & DASHBOARD
 
-### US09 - Xem Lịch Sử Submission
+### US09 - Xem Lịch Sử Execution
 
 **AS A** Coder  
-**I WANT** Xem lại các bài đã nộp  
-**SO THAT** Theo dõi quá trình làm bài
+**I WANT** Xem lại các lần Run và Submit của mình  
+**SO THAT** Theo dõi quá trình làm bài và debug
 
 **ACCEPTANCE CRITERIA:**
 
-- [ ] Submission list:
+- [ ] Execution history list:
   - `GET /api/submissions` (my submissions)
-  - List all submissions by current user
-  - Fields: submission_id, question title, status, passed/total, timestamp
+  - List all `RUN` và `SUBMIT` của current user
+  - Fields: submission_id, type, question title, status, passed/total, timestamp
 
 - [ ] Pagination & filtering:
   - Pagination: default 20/page
-  - Filter by: question, date range, status
+  - Filter by: question, date range, status, type (`RUN`/`SUBMIT`)
   - Sort by: timestamp (newest first)
   - Search by: question title
 

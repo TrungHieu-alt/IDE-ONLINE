@@ -361,6 +361,7 @@ POST /api/auth/refresh
 
 **Notes:**
 - Refresh token rotation invalidates the previous token after use
+- Calling `/api/auth/refresh` is allowed even if the caller's current access token has not expired yet; the endpoint decision is based only on the refresh token state
 - If refresh token reuse is detected, all active refresh tokens for that user are revoked
 - Refresh handler also checks current user `auth_version`, `is_active`, and `deleted_at`
 
@@ -1051,12 +1052,14 @@ POST /api/submissions/run
 | Status | Code | When |
 |--------|------|------|
 | 400 | `VALIDATION_ERROR` | Empty code, invalid language_id |
+| 429 | `TOO_MANY_REQUESTS` | Per-user/IP run quota exceeded |
 | 503 | `JUDGE0_UNAVAILABLE` | Judge0 down after 3 retries |
 
 **Notes:**
 - Creates a `submissions` record (type=RUN) + 1 `execution_results` record
 - Judge0 constraints: wall-time 10s, memory 256MB, output 100KB
 - Client receives final result via WebSocket event `execution_completed`
+- Rate limit: `30` requests / minute / authenticated user and `60` requests / minute / IP
 
 **User Story:** US06, US07
 
@@ -1114,6 +1117,7 @@ POST /api/submissions/submit
 | Any compile error | `COMPILATION_ERROR` |
 | Any runtime error | `RUNTIME_ERROR` |
 | Any timeout | `TIME_LIMIT_EXCEEDED` |
+| Any memory limit exceeded (and no higher-priority error) | `MEMORY_LIMIT_EXCEEDED` |
 | Some wrong output | `WRONG_ANSWER` |
 
 Priority: COMPILATION_ERROR > RUNTIME_ERROR > TIME_LIMIT_EXCEEDED > MEMORY_LIMIT_EXCEEDED > WRONG_ANSWER > ACCEPTED
@@ -1125,6 +1129,7 @@ Priority: COMPILATION_ERROR > RUNTIME_ERROR > TIME_LIMIT_EXCEEDED > MEMORY_LIMIT
 | 400 | `VALIDATION_ERROR` | Empty code, invalid language_id |
 | 404 | `QUESTION_NOT_FOUND` | Question doesn't exist or unpublished |
 | 422 | `NO_TEST_CASES` | Question has no test cases |
+| 429 | `TOO_MANY_REQUESTS` | Per-user/IP submit quota exceeded |
 | 503 | `JUDGE0_UNAVAILABLE` | Judge0 down |
 
 **Notes:**
@@ -1133,6 +1138,7 @@ Priority: COMPILATION_ERROR > RUNTIME_ERROR > TIME_LIMIT_EXCEEDED > MEMORY_LIMIT
 - Output comparison: trim trailing whitespace/newlines
 - Client receives progress via `grading_progress` and final detail via `grading_completed`
 - Submission stores question/test snapshots so old history remains stable after content edits or deletes
+- Rate limit: `10` requests / minute / authenticated user and `20` requests / minute / IP
 
 **User Story:** US12, US12.1
 
@@ -1182,6 +1188,7 @@ GET /api/submissions
 
 **Notes:**
 - Only returns current user's submissions
+- Returns both `RUN` and `SUBMIT`; callers can filter by `type`
 - Default sort: `created_at DESC` (newest first)
 - `question` is null for free runs without question context
 - If the original question was later deleted, `question.title` is served from submission snapshot data
@@ -1241,8 +1248,8 @@ GET /api/submissions/:submission_id
 | 404 | `SUBMISSION_NOT_FOUND` | ID doesn't exist |
 
 **Notes:**
-- For `type=RUN`: `execution_results` has 1 item with `stdin` = custom input, no `expected_output`
-- For `type=SUBMIT`: hidden test case results have masked `stdin`, `stdout`, `expected_output`
+- For `type=RUN`: `execution_results` has 1 item with `stdin` = stored custom input snapshot, no `expected_output`
+- For `type=SUBMIT`: backend stores `stdin_snapshot` internally for audit/debug, but hidden test case results return masked `stdin`, `stdout`, `expected_output`
 - Historical detail is based on snapshot data stored at grading time, so edits/deletes to questions or test cases do not alter old submissions
 
 **User Story:** US09, US12.1
@@ -1441,6 +1448,11 @@ PATCH /api/sessions/:session_id/close
 
 This same WebSocket connection is also used to stream execution and grading events for the active session.
 
+**Security note:**
+- Query-param token auth is accepted for MVP browser compatibility, but it leaks more easily into proxy/server logs than header-based auth
+- Deployments must redact query strings from access logs and avoid logging raw connection URLs
+- Preferred hardening path is exchanging the regular access token for a short-lived WebSocket ticket and passing that ephemeral token in the query param
+
 ### 10.1 Client → Server Events
 
 #### `join_session`
@@ -1494,6 +1506,7 @@ Sent by **Coder only** when code is modified. Debounced at 300ms on client side.
 
 **Notes:**
 - Server updates `sessions.current_code`, `sessions.current_language_id`, `sessions.current_version`, and `sessions.last_activity_at`
+- Server appends the event to the short-lived session event buffer for reconnect catch-up
 - Server broadcasts `code_updated` to all viewers
 - If sender is not the session's coder → server ignores (read-only enforcement)
 

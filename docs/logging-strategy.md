@@ -61,12 +61,18 @@ Bao gồm:
 - Truy cập API không hợp lệ
 
 Ví dụ log:
-INFO User login successful
-user_id=123
-email=user@example.com
-
-ip_address=192.168.1.10
-timestamp=2026-03-10T10:21:12Z
+```json
+{
+  "timestamp": "2026-03-10T10:21:12Z",
+  "level": "INFO",
+  "service": "auth-service",
+  "event": "user_login_success",
+  "user_id": 123,
+  "email": "user@example.com",
+  "ip_address": "192.168.1.10",
+  "request_id": "req-123"
+}
+```
 
 
 ---
@@ -85,14 +91,20 @@ Bao gồm:
 - Memory limit exceeded
 
 Ví dụ:
-
-
-INFO Code execution completed
-user_id=123
-language=Python
-execution_time=0.21s
-memory_used=8MB
-status=ACCEPTED
+```json
+{
+  "timestamp": "2026-03-10T10:30:15Z",
+  "level": "INFO",
+  "service": "code-execution",
+  "event": "execution_completed",
+  "user_id": 123,
+  "language": "Python",
+  "execution_time": "0.21s",
+  "memory_used": "8MB",
+  "status": "ACCEPTED",
+  "request_id": "req-124"
+}
+```
 
 
 ---
@@ -108,14 +120,20 @@ Bao gồm:
 - Kết quả tổng thể
 
 Ví dụ:
-
-
-INFO Submission graded
-user_id=123
-question_id=45
-passed_tests=6
-total_tests=8
-status=WRONG_ANSWER
+```json
+{
+  "timestamp": "2026-03-10T10:32:00Z",
+  "level": "INFO",
+  "service": "submission-service",
+  "event": "submission_graded",
+  "user_id": 123,
+  "question_id": 45,
+  "passed_tests": 6,
+  "total_tests": 8,
+  "status": "WRONG_ANSWER",
+  "request_id": "req-125"
+}
+```
 
 
 ---
@@ -132,12 +150,17 @@ Bao gồm:
 - Kết thúc session
 
 Ví dụ:
-
-
-INFO Coding session started
-session_id=550e8400-e29b-41d4-a716-446655440000
-coder_id=123
-timestamp=2026-03-10T11:00:00Z
+```json
+{
+  "timestamp": "2026-03-10T11:00:00Z",
+  "level": "INFO",
+  "service": "realtime-service",
+  "event": "session_started",
+  "session_id": "550e8400-e29b-41d4-a716-446655440000",
+  "coder_id": 123,
+  "request_id": "req-126"
+}
+```
 
 
 ---
@@ -154,12 +177,18 @@ Bao gồm:
 - Vi phạm resource limits
 
 Ví dụ:
-
-
-WARNING Multiple failed login attempts detected
-ip_address=192.168.1.15
-attempts=5
-action=temporary_block
+```json
+{
+  "timestamp": "2026-03-10T11:15:00Z",
+  "level": "WARNING",
+  "service": "security-monitor",
+  "event": "multiple_failed_logins",
+  "ip_address": "192.168.1.15",
+  "attempts": 5,
+  "action": "temporary_block",
+  "request_id": "req-127"
+}
+```
 
 
 ---
@@ -240,19 +269,21 @@ Hệ thống tuân thủ các nguyên tắc logging sau:
 # 9. Ví dụ Log dạng JSON
 
 Ví dụ structured log:
-
-
+```json
 {
-"timestamp": "2026-03-10T10:30:15Z",
-"level": "INFO",
-"service": "code-execution",
-"user_id": 123,
-"question_id": 45,
-"language": "Python",
-"execution_time": "0.12s",
-"memory_used": "6MB",
-"status": "ACCEPTED"
+  "timestamp": "2026-03-10T10:30:15Z",
+  "level": "INFO",
+  "service": "code-execution",
+  "event": "execution_completed",
+  "user_id": 123,
+  "question_id": 45,
+  "language": "Python",
+  "execution_time": "0.12s",
+  "memory_used": "6MB",
+  "status": "ACCEPTED",
+  "request_id": "req-128"
 }
+```
 
 
 Structured logs giúp dễ dàng:

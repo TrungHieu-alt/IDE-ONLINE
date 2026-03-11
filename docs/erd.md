@@ -19,6 +19,7 @@ erDiagram
     submissions ||--o{ execution_results : "contains"
     test_cases ||--o{ execution_results : "evaluated in"
     sessions ||--o{ session_viewers : "has"
+    sessions ||--o{ session_events : "buffers"
     sessions }o--|| users : "hosted by"
     sessions }o--o| questions : "optionally linked to"
 
@@ -86,6 +87,7 @@ erDiagram
         uuid submission_id FK "→ submissions.id, NOT NULL"
         uuid test_case_id FK "→ test_cases.id, nullable (null for free run)"
         text stdin "nullable, custom input for free run"
+        text stdin_snapshot "nullable, frozen actual input sent to Judge0"
         text stdout "nullable"
         text stderr "nullable"
         text expected_output_snapshot "nullable, frozen expected output for history"
@@ -109,6 +111,15 @@ erDiagram
         timestamp created_at "NOT NULL"
         timestamp last_activity_at "nullable, used for idle timeout"
         timestamp ended_at "nullable"
+    }
+
+    session_events {
+        uuid id PK
+        uuid session_id FK "→ sessions.id, NOT NULL"
+        integer version "NOT NULL, monotonic per session"
+        varchar event_type "code_changed | language_changed | execution_started | execution_completed | grading_progress | grading_completed"
+        jsonb payload "NOT NULL, event body for reconnect catch-up"
+        timestamp created_at "NOT NULL"
     }
 
     session_viewers {
@@ -286,7 +297,8 @@ Individual execution results. One row per run against custom input or per test c
 | `id` | UUID | PK | Primary key |
 | `submission_id` | UUID | FK → submissions.id, NOT NULL, ON DELETE CASCADE | Parent submission |
 | `test_case_id` | UUID | FK → test_cases.id, nullable | NULL for free run (custom input) |
-| `stdin` | TEXT | nullable | Custom input (free run only, max 100KB) |
+| `stdin` | TEXT | nullable | Backward-compatible field for free run custom input display |
+| `stdin_snapshot` | TEXT | nullable | Frozen actual input sent to Judge0 (free run custom input or copied from `test_cases.input` at grading time) |
 | `stdout` | TEXT | nullable | Program output (max 100KB) |
 | `stderr` | TEXT | nullable | Error output |
 | `status` | ENUM | NOT NULL, default `'PENDING'` | Same enum as `overall_status` |
@@ -304,8 +316,8 @@ Individual execution results. One row per run against custom input or per test c
 - `UNIQUE INDEX idx_exec_results_judge0_token ON execution_results(judge0_token)` — idempotent Judge0 callback/webhook correlation
 
 **Relationship Rules:**
-- If `type = RUN` → exactly **1** execution_result with `test_case_id = NULL`, `stdin = custom input`
-- If `type = SUBMIT` → **N** execution_results with `test_case_id = set`, `stdin = NULL` (input comes from test_case)
+- If `type = RUN` → exactly **1** execution_result with `test_case_id = NULL`, `stdin = custom input`, `stdin_snapshot = custom input`
+- If `type = SUBMIT` → **N** execution_results with `test_case_id = set`, `stdin = NULL`, `stdin_snapshot = copied test_case.input`
 - Historical detail reads from snapshot columns, not live `test_cases` rows
 
 **User Story Mapping:** US06, US07, US12, US12.1
@@ -314,7 +326,7 @@ Individual execution results. One row per run against custom input or per test c
 
 ### 2.6 `sessions`
 
-Realtime coding sessions. Coder creates, Viewers join. Stores latest code snapshot for late-joining viewers.
+Realtime coding sessions. Coder creates, Viewers join. Stores latest code snapshot for late-joining viewers and tracks reconnect/auto-close lifecycle.
 
 | Column | Type | Constraints | Description |
 |--------|------|-------------|-------------|
@@ -326,7 +338,7 @@ Realtime coding sessions. Coder creates, Viewers join. Stores latest code snapsh
 | `current_language_id` | INTEGER | nullable | Current language in editor |
 | `current_version` | INTEGER | NOT NULL, default `0` | Latest applied sync version for ordering and recovery |
 | `created_at` | TIMESTAMP | NOT NULL | Session start |
-| `last_activity_at` | TIMESTAMP | nullable | Updated on coder change/run/submit for idle close policy |
+| `last_activity_at` | TIMESTAMP | nullable | Updated on coder change/run/submit for idle close policy and disconnect grace window |
 | `ended_at` | TIMESTAMP | nullable | Session end (when closed) |
 
 **Indexes:**
@@ -337,14 +349,41 @@ Realtime coding sessions. Coder creates, Viewers join. Stores latest code snapsh
 1. Coder creates → `status = ACTIVE`
 2. Viewers join via link
 3. `last_activity_at` tracked from realtime/editor activity
-4. Coder disconnects → auto-close after 5 min idle
-5. Coder clicks "End Session" → `status = CLOSED`, `ended_at = NOW()`
+4. Coder disconnects → session remains recoverable for 5 minutes
+5. If coder reconnects within 5 minutes → continue same session
+6. If not → auto-close and set `ended_at`
+7. Coder clicks "End Session" → `status = CLOSED`, `ended_at = NOW()`
 
-**User Story Mapping:** US14
+**User Story Mapping:** US13, US14, US14.1
 
 ---
 
-### 2.7 `session_viewers`
+### 2.7 `session_events`
+
+Short-lived ordered event buffer for reconnect catch-up. Clients reconnect with their last known `version`; server replays later events if still retained, otherwise falls back to the full snapshot in `sessions.current_code`.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | UUID | PK | Primary key |
+| `session_id` | UUID | FK → sessions.id, NOT NULL, ON DELETE CASCADE | Parent session |
+| `version` | INTEGER | NOT NULL | Monotonic version within a session |
+| `event_type` | VARCHAR(50) | NOT NULL | Event kind |
+| `payload` | JSONB | NOT NULL | Serialized event body |
+| `created_at` | TIMESTAMP | NOT NULL | Event timestamp |
+
+**Indexes:**
+- `UNIQUE INDEX idx_session_events_version ON session_events(session_id, version)`
+- `INDEX idx_session_events_created_at ON session_events(session_id, created_at)`
+
+**Retention:**
+- Keep only a short rolling window (for example 5-10 minutes) for reconnect recovery
+- May be implemented in Redis Streams in production, but the logical model is documented here so reconnect behavior is explicit
+
+**User Story Mapping:** US13, US14.1
+
+---
+
+### 2.8 `session_viewers`
 
 Join table tracking which viewers are/were in a session. Supports viewer count and history for public-by-link sessions.
 
@@ -364,7 +403,7 @@ Join table tracking which viewers are/were in a session. Supports viewer count a
 
 ---
 
-### 2.8 `refresh_tokens`
+### 2.9 `refresh_tokens`
 
 Stores hashed rotating refresh tokens used for remember-session flows.
 
@@ -443,11 +482,15 @@ A free **Run** doesn't require a question — the user just wants to test code w
 
 ### 4.3 Why `stdin` is on `execution_results` (not `submissions`)?
 
-For a **Run**, the custom input belongs to the individual execution. For a **Submit**, each test case has its own input (from `test_cases.input`). Keeping `stdin` on `execution_results` makes both cases consistent.
+For a **Run**, the custom input belongs to the individual execution. For a **Submit**, each test case has its own input (from `test_cases.input`). Keeping execution input on `execution_results` makes both cases consistent, while `stdin_snapshot` freezes the exact input sent to Judge0 for historical debugging after test cases are edited.
 
 ### 4.4 Why `current_code` on `sessions`?
 
 When a viewer joins late, they need the latest code snapshot. Instead of replaying all WebSocket events, the server stores the latest snapshot in `sessions.current_code` and sends it on join.
+
+### 4.5 Why `session_events` if `current_version` already exists?
+
+`current_version` only tells us the newest version number. Reconnect recovery needs the ordered events between version `X` and `current_version`. The short-lived `session_events` buffer provides that delta stream; if the buffer window is gone, the server falls back to `sessions.current_code`.
 
 ---
 
@@ -457,7 +500,7 @@ When a viewer joins late, they need the latest code snapshot. Instead of replayi
 ```
 1. INSERT submissions (type=RUN, question_id=NULL, source_code=..., language_id=71)
 2. Send to Judge0 → get token
-3. INSERT execution_results (submission_id=..., test_case_id=NULL, stdin="5 10", judge0_token=...)
+3. INSERT execution_results (submission_id=..., test_case_id=NULL, stdin="5 10", stdin_snapshot="5 10", judge0_token=...)
 4. Judge0 callback/webhook returns result
 5. UPDATE execution_results (stdout="15", status=ACCEPTED, execution_time=0.05)
 6. UPDATE submissions (overall_status=ACCEPTED)
@@ -470,7 +513,7 @@ When a viewer joins late, they need the latest code snapshot. Instead of replayi
 2. Fetch test_cases WHERE question_id=q1 → [tc1, tc2, tc3, tc4, tc5]
 3. For EACH test case:
    a. Send to Judge0 (stdin = test_case.input) → get token
-   b. INSERT execution_results (submission_id=..., test_case_id=tc.id, judge0_token=...)
+   b. INSERT execution_results (submission_id=..., test_case_id=tc.id, stdin_snapshot=test_case.input, judge0_token=...)
 4. Judge0 callback/webhook returns results for all tokens
 5. UPDATE each execution_results (stdout, status, time, memory)
 6. Compare: actual_output vs test_case.expected_output

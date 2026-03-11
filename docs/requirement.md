@@ -46,14 +46,14 @@ Platform cho phép người dùng viết code online với nhiều ngôn ngữ l
 | ID | Requirement | Description |
 |----|-------------|-------------|
 | **F1** | Code Editor | Web-based editor (Monaco) với syntax highlight cho 9 ngôn ngữ. Support chọn ngôn ngữ từ dropdown. |
-| **F2** | Code Execution | User click **Run/Submit** → backend tạo submission async, gửi code đến Judge0, trả về `submission_id` ngay và client nhận tiến trình/kết quả qua WebSocket |
+| **F2** | Code Execution | User click **Run/Submit** → backend tạo submission async, gửi code đến Judge0, trả về `submission_id` ngay và client nhận tiến trình/kết quả qua WebSocket. Cả `RUN` và `SUBMIT` đều được lưu để phục vụ history/audit, nhưng chỉ `SUBMIT` được tính là bài nộp chính thức theo câu hỏi. |
 | **F3** | Realtime Sync | Coder gõ code → Viewer thấy live realtime (1 chiều, debounce 300ms) |
 | **F4** | Question Management | Admin tạo/sửa/xóa câu hỏi (title, description markdown; sample input/output được nhúng trong description) |
 | **F5** | Test Case Management | Admin tạo hidden test case, hệ thống auto-compare output vs expected |
 | **F6** | User Registration | User đăng ký email/password, email verification |
 | **F7** | User Login | Login với access token + refresh token rotation để support remember session |
 | **F8** | Role Assignment | Admin gán role (Admin/Coder/Viewer) cho user |
-| **F9** | Submission History | Lưu & display: question, code, language, status, execution time, memory, timestamp |
+| **F9** | Execution History | Lưu & display history cho cả `RUN` và `SUBMIT`: question, type, code, language, status, execution time, memory, timestamp |
 | **F10** | Admin Dashboard | Xem tất cả submission, filter by user/question/date |
 
 ---
@@ -65,11 +65,12 @@ Platform cho phép người dùng viết code online với nhiều ngôn ngữ l
 | **NFR1** | Isolation | Code user A không truy cập file/process user B (Judge0 container sandbox) |
 | **NFR2** | Resource Limit | Execution time max 10s, Memory max 256MB |
 | **NFR3** | Concurrency | Hỗ trợ ≥10 concurrent submissions, queue nếu vượt |
-| **NFR4** | Response Time | Non-execution API response < 500ms, execution create endpoint < 500ms, page load < 2s |
+| **NFR4** | Response Time | Non-execution API response < 500ms; execution create endpoints (`POST /run`, `POST /submit`) < 500ms vì chỉ enqueue và trả `submission_id`; async execution/grading completion và polling/read-result APIs không thuộc SLA 500ms; page load < 2s |
 | **NFR5** | Realtime Latency | Sync delay < 1 giây |
 | **NFR6** | Security | Sandbox chặn fork/network call, JWT auth, HTTPS |
 | **NFR7** | Availability | Judge0 down → hiển thị error rõ ràng, auto-retry, không crash system |
 | **NFR8** | Database ACID | PostgreSQL transactions, data consistency |
+| **NFR9** | Session Continuity | Realtime session giữ trạng thái tối đa 5 phút sau khi coder disconnect; nếu coder reconnect trước timeout thì session tiếp tục, quá 5 phút thì auto-close |
 
 ---
 
@@ -86,12 +87,12 @@ Platform cho phép người dùng viết code online với nhiều ngôn ngữ l
 | **Code Editor / Session**    | Tạo phiên code mới                                       |                             ✅                             |                        ❌                        |   ✅   |
 |                              | Chỉnh sửa code trong editor                              |                             ✅                             |                        ❌                        |   ✅   |
 |                              | Chọn ngôn ngữ lập trình                                  |                             ✅                             |                        ❌                        |   ✅   |
-|                              | Xem code đang được viết realtime                         | ⚠️ *(Chỉ session của chính mình hoặc session công khai qua link)* |                        ✅                        |   ✅   |
-|                              | Tham gia session với quyền chỉ xem                       |                             ❌                             |                        ✅                        |   ✅   |
+|                              | Xem code đang được viết realtime                         | ✅ *(Session của chính mình)* | ✅ *(Session công khai qua link)* |   ✅   |
+|                              | Tham gia session với quyền chỉ xem                       | ⚠️ *(Có thể join session công khai của người khác với quyền viewer; không được edit)* |                        ✅                        |   ✅   |
 |                              | Chỉnh sửa code trong session của người khác              |                             ❌                             |                        ❌                        |   ✅   |
 | **Code Execution**           | Chạy code (Run)                                          |                             ✅                             |                        ❌                        |   ✅   |
 |                              | Xem kết quả chạy code của chính mình                     |                             ✅                             |                        ❌                        |   ✅   |
-|                              | Xem kết quả chạy code realtime của session đang theo dõi | ⚠️ *(Chỉ session của chính mình hoặc session công khai qua link)* |                        ✅                        |   ✅   |
+|                              | Xem kết quả chạy code realtime của session đang theo dõi | ⚠️ *(Session của chính mình hoặc session công khai qua link mà user đang theo dõi)* |                        ✅                        |   ✅   |
 |                              | Dừng / hủy execution đang chạy                           |            ⚠️ *(Chỉ execution của chính mình)*            |                        ❌                        |   ✅   |
 | **History / Submissions**    | Xem lịch sử run / submit của chính mình                  |                             ✅                             |                        ❌                        |   ✅   |
 |                              | Xem chi tiết submission của chính mình                   |                             ✅                             |                        ❌                        |   ✅   |
@@ -176,7 +177,9 @@ Platform cho phép người dùng viết code online với nhiều ngôn ngữ l
 
 ✅ User đăng ký, verify email, login, refresh session, chọn câu hỏi  
 ✅ Viết code, click Run/Submit, nhận `submission_id` ngay và theo dõi kết quả async qua WebSocket  
+✅ History hiển thị được cả `RUN` và `SUBMIT`, filter theo type/status  
 ✅ Realtime sync code Coder → Viewer realtime  
+✅ Session vẫn giữ được tối đa 5 phút khi coder mất kết nối và tiếp tục nếu reconnect đúng hạn  
 ✅ Admin tạo test case, auto-grade submission  
 ✅ Isolation: Code user A không truy cập user B  
 ✅ 10 concurrent submissions không timeout  
