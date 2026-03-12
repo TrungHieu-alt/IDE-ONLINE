@@ -18,6 +18,7 @@
 8. [Submissions & History](#8-submissions--history)
 9. [Sessions (Realtime)](#9-sessions-realtime)
 10. [WebSocket Events](#10-websocket-events)
+11. [Internal - Judge0 Callback](#11-internal---judge0-callback)
 
 ---
 
@@ -1052,11 +1053,13 @@ POST /api/submissions/run
 | Status | Code | When |
 |--------|------|------|
 | 400 | `VALIDATION_ERROR` | Empty code, invalid language_id |
+| 409 | `SUBMISSION_ALREADY_PENDING` | User already has a `PENDING` run/submit in progress |
 | 429 | `TOO_MANY_REQUESTS` | Per-user/IP run quota exceeded |
 | 503 | `JUDGE0_UNAVAILABLE` | Judge0 down after 3 retries |
 
 **Notes:**
 - Creates a `submissions` record (type=RUN) + 1 `execution_results` record
+- Per-user concurrency guard is server-side: only 1 `PENDING` submission (`RUN` or `SUBMIT`) is allowed per user at a time
 - Judge0 constraints: wall-time 10s, memory 256MB, output 100KB
 - Client receives final result via WebSocket event `execution_completed`
 - Rate limit: `30` requests / minute / authenticated user and `60` requests / minute / IP
@@ -1128,6 +1131,7 @@ Priority: COMPILATION_ERROR > RUNTIME_ERROR > TIME_LIMIT_EXCEEDED > MEMORY_LIMIT
 |--------|------|------|
 | 400 | `VALIDATION_ERROR` | Empty code, invalid language_id |
 | 404 | `QUESTION_NOT_FOUND` | Question doesn't exist or unpublished |
+| 409 | `SUBMISSION_ALREADY_PENDING` | User already has a `PENDING` run/submit in progress |
 | 422 | `NO_TEST_CASES` | Question has no test cases |
 | 429 | `TOO_MANY_REQUESTS` | Per-user/IP submit quota exceeded |
 | 503 | `JUDGE0_UNAVAILABLE` | Judge0 down |
@@ -1141,8 +1145,6 @@ Priority: COMPILATION_ERROR > RUNTIME_ERROR > TIME_LIMIT_EXCEEDED > MEMORY_LIMIT
 - Rate limit: `10` requests / minute / authenticated user and `20` requests / minute / IP
 
 **User Story:** US12, US12.1
-
----
 
 ## 8. Submissions & History
 
@@ -1400,13 +1402,15 @@ GET /api/sessions/:session_id
 
 | Status | Code | When |
 |--------|------|------|
+| 403 | `FORBIDDEN` | User does not have permission to join this session |
 | 404 | `SESSION_NOT_FOUND` | Session ID doesn't exist |
 | 410 | `SESSION_CLOSED` | Session has ended |
 
 **Notes:**
 - `current_code` provides the latest snapshot for late-joining viewers
 - Viewer connects to `websocket_url` after this call
-- Session is public-by-link for authenticated users with role `VIEWER`, `CODER`, or `ADMIN`
+- Session is public-by-link only for authenticated users with role `VIEWER` or `ADMIN`
+- Authenticated users with role `CODER` may only access their own hosted session, not join another coder's session as a viewer
 
 **User Story:** US14.1
 
@@ -1469,6 +1473,22 @@ Sent by viewer after WebSocket connection established.
 ```
 
 **Server responds with:** `viewer_joined` broadcast + current code snapshot
+
+**Authorization rules:**
+- `VIEWER` and `ADMIN` may join any active session they are allowed to access by link
+- `CODER` may only attach to their own hosted session; joining another coder's session must be rejected
+
+**If forbidden:** server emits an error event and closes/refuses the join for that socket.
+
+```json
+{
+  "event": "error",
+  "data": {
+    "code": "FORBIDDEN",
+    "message": "You do not have permission to join this session."
+  }
+}
+```
 
 ---
 
@@ -1684,3 +1704,38 @@ Periodic checksum verification (every 10 seconds). Ensures viewer's local state 
 **Client logic:**
 - Compute checksum of local code
 - If mismatch → request full snapshot via `join_session` event
+
+---
+
+## 11. Internal - Judge0 Callback
+
+### 11.1 Judge0 Webhook
+
+🔒 Internal only (không expose ra internet)
+
+```
+POST /internal/judge0/callback
+```
+
+**Description:** Judge0 gửi callback kết quả execution/grading về backend để hoàn tất submission bất đồng bộ.
+
+**Authentication:** Shared secret header
+
+```
+X-Judge0-Callback-Secret: <secret_tu_env>
+```
+
+Backend phải verify header này trước khi xử lý bất kỳ payload nào. Nếu không khớp thì trả về `401 Unauthorized` và log sự kiện ngay.
+
+**HTTP Errors:**
+
+| Status | Code | When |
+|--------|------|------|
+| 401 | `UNAUTHORIZED` | Missing/invalid callback secret |
+| 404 | `SUBMISSION_NOT_FOUND_YET` | Callback đến sớm hơn DB record; backend đẩy vào retry flow idempotent |
+| 409 | `DUPLICATE_CALLBACK` | Callback đã được xử lý trước đó và bị replay |
+
+**Security notes:**
+- Endpoint này là internal-only: chỉ accessible trong Docker internal network
+- Không route endpoint này qua reverse proxy/public ingress
+- Shared secret lấy từ environment variable, không commit vào repo

@@ -477,12 +477,13 @@ Client event received
         │
    code_changed? ──► [Verify sender là coder của session]
         │
-   join_session? ──► [Verify session tồn tại và còn ACTIVE]
+   join_session? ──► [Verify session tồn tại, còn ACTIVE, và role được phép join]
 ```
 
 ### 9.3 Event Validation
 
 - Không trust `session_id` trong event payload — lấy từ authenticated WS session context
+- Với `join_session`, chỉ cho phép `VIEWER`/`ADMIN`; nếu là `CODER` thì chỉ được join session do chính họ host
 - Validate `version` là integer dương
 - Validate `code_content` size ≤ 1MB
 - Không eval hoặc execute bất kỳ data nào từ WebSocket event
@@ -539,6 +540,8 @@ Judge0 là dependency quan trọng nhất và có risk cao nhất.
 | Judge0 API trust | Validate và sanitize tất cả response từ Judge0 trước khi dùng |
 
 Chạy Judge0 **selfhost** giảm risk so với cloud-hosted (không có third-party access vào execution data) nhưng tăng trách nhiệm maintain security patches.
+
+Judge0 callback endpoint phải được bảo vệ bằng shared secret. Secret này là environment variable, không commit vào repo. Ngoài ra, endpoint chỉ được accessible từ Docker internal network, không route ra ngoài qua reverse proxy. Mô hình này tạo 2 lớp bảo vệ: network isolation để chặn truy cập từ ngoài và shared secret để chặn request giả mạo nếu lớp network bị bypass.
 
 ### 11.2 NPM/Node Dependencies
 

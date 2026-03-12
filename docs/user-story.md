@@ -291,9 +291,10 @@ ACCEPTANCE CRITERIA:
   - Re-enable khi execution complete
 
 - [ ] Server-side concurrency guard:
-  - Nếu user đã có submission trạng thái `PENDING` thì backend reject request `Run` mới
-  - Không chỉ rely vào button disable ở frontend
-  - Response: `409 Conflict` với message rõ ràng để tránh tạo nhiều execution đồng thời cho cùng user
+  - Mỗi user chỉ được có 1 submission `PENDING` tại một thời điểm
+  - Nếu user đã có `PENDING` submission thì backend reject request `Run` mới với `409 Conflict`
+  - Check này độc lập với button disable ở frontend
+  - Sau khi submission complete (bất kể `ACCEPTED` hay fail) thì user được submit/run tiếp
 
 - [ ] Timeout handling:
   - Code không return sau 10s → kill process

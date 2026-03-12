@@ -109,6 +109,8 @@ Kiểm tra toàn bộ flow người dùng:
 - Trong vòng 1 giây → Viewer thấy code cập nhật
 - Test với 1 coder + 5 viewer cùng lúc
 - Viewer disconnect → reconnect → nhận full code snapshot
+- Coder disconnect < 5 phút rồi reconnect → session tiếp tục, giữ nguyên code hiện tại
+- Coder disconnect > 5 phút và không còn WebSocket connection → scheduled worker đóng session, broadcast `session_closed` với `reason = "idle_timeout"`
 
 **Flow 5: Admin Tạo Câu Hỏi & Chấm Điểm**
 - Admin tạo câu hỏi (title, description; sample input/output nhúng trong description)
@@ -156,6 +158,7 @@ Kiểm tra toàn bộ flow người dùng:
 - **Judge0 down**: Container bị kill → API trả error, UI hiển thị degraded mode
 - **Database timeout**: Query vượt 5s → retry, nếu vẫn fail → error message
 - **WebSocket disconnect**: Client tự động reconnect với exponential backoff
+- **Idle session auto-close**: giả lập coder mất kết nối và không reconnect; verify worker chạy mỗi 60s chỉ đóng session khi vừa quá 5 phút idle vừa không còn coder WebSocket connection
 - **Network latency**: Simulate 500ms delay → verify realtime vẫn < 1s
 - **Queue full**: 100 submission queue full → define rõ reject `503` hay tiếp tục queue với SLA khác
 
@@ -222,31 +225,40 @@ COMMIT;
 -- All or nothing
 ```
 
-**Concurrent Submit Test:**
-- User click Run button 5 lần nhanh liên tiếp
-- Verify DB có đúng 5 submission rows
-- Verify `COUNT(*) FROM submissions WHERE user_id = ?` tăng đúng 5
-- Verify mỗi submission có unique ID + timestamp tăng
+**Concurrent Submit Test (same user):**
+- User click Run button 5 lần nhanh liên tiếp từ cùng một tài khoản
+- Verify chỉ có 1 request tạo `PENDING` submission
+- Verify 4 request còn lại trả `409 SUBMISSION_ALREADY_PENDING`
+- Verify DB chỉ tăng đúng 1 submission row cho user đó
+- Verify partial unique index / DB constraint là lớp chặn cuối cùng nếu 2 request cùng vượt qua app-layer check
+
+**Concurrent Submit Test (different users):**
+- 10 user khác nhau submit cùng lúc
+- Verify hệ thống chấp nhận và xử lý được ít nhất 10 submission đồng thời
+- Verify không lost result, không duplicate row
 
 **Judge0 Callback Race:**
 - Submit code → Judge0 token = "abc"
 - Judge0 processing, callback sắp về
 - Callback/webhook từ Judge0 bị chậm hoặc tạm thời chưa tới
 - Judge0 callback đến TRƯỚC DB insert hoàn tất
-- Callback handler: kiểm tra submission có tồn tại không? Nếu không → queue for retry
+- Callback handler: verify `X-Judge0-Callback-Secret` trước
+- Nếu secret hợp lệ: kiểm tra submission có tồn tại không? Nếu không → queue for retry
+- Nếu secret sai/thiếu: trả `401`, không queue retry, log security event
 - Verify: không duplicate result, không lost result
 
 **Test Code:**
 ```javascript
-// Concurrent insert test
+// Same-user concurrency guard test
 Promise.all([
   submitCode({...}),  // Submit 1
   submitCode({...}),  // Submit 2
   submitCode({...}),  // Submit 3
 ])
 .then(() => {
-  // Verify DB: COUNT(*) = 3
-  // Verify submission rows created đủ 3 bản ghi
+  // Verify exactly 1 request accepted
+  // Verify DB: COUNT(*) increases by 1 for this user
+  // Verify remaining requests return 409 SUBMISSION_ALREADY_PENDING
 })
 
 // Callback race test
@@ -301,9 +313,10 @@ setTimeout(() => {
 |----------|-------|
 | Judge0 timeout (30s) | Retry 3x (1s→2s→4s), nếu vẫn fail → SYSTEM_ERROR |
 | Judge0 return 5xx | Retry exponential backoff, queue for async retry |
-| Judge0 queue full | Submission queue ở backend, wait hoặc reject? (define clear!) |
+| Judge0 queue full | Backend queue hữu hạn; nếu đầy thì reject ngay với `503 Service Unavailable`, không drop silently |
 | WebSocket disconnect | Client reconnect auto với backoff, resubscribe session/submission stream, viewer thấy "Mất kết nối" |
 | Database slow (> 5s) | Timeout, retry safe operation, error message |
+| Judge0 callback secret invalid | Reject `401`, log security event, không xử lý business logic |
 
 **Health Check:**
 - Monitor Judge0 uptime mỗi 30 giây
@@ -344,6 +357,7 @@ setTimeout(() => {
 **Ví dụ:**
 - Viewer cố chạy code
 - Coder xem submission của người khác
+- Coder cố join session của coder khác
 - User thường cố tạo câu hỏi (admin only)
 
 **Message:** `"Bạn không có quyền thực hiện chức năng này."`
@@ -354,8 +368,9 @@ setTimeout(() => {
 **HTTP Status:** 409 hoặc 422  
 **Ví dụ:**
 - Câu hỏi đã archive
-- Vượt rate limit (5 submit/phút)
-- Session đã kết thúc
+- User đã có submission `PENDING` và bấm Run/Submit lần nữa → `409`
+- Session đã kết thúc → `410` nếu join/rejoin session
+- Không có test case cho question → `422`
 
 **Message:** `"Phiên làm bài đã kết thúc. Bạn không thể tiếp tục chạy code."`
 
@@ -496,7 +511,7 @@ execution_time_ms, judge0_latency_ms, error_type, request_id
 ✅ E2E test pass (5 main flow)  
 ✅ Performance: realtime < 1s, API < 500ms  
 ✅ Security: XSS/SQLi test pass, sandbox isolated  
-✅ Load test: 20 concurrent submission  
+✅ Load test: 10+ concurrent submission từ các user khác nhau  
 ✅ Judge0 down → graceful error, system stable  
 ✅ No Critical/High severity bugs  
 

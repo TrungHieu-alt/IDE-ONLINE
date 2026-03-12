@@ -76,13 +76,13 @@ Platform cho phép người dùng viết code online với nhiều ngôn ngữ l
 |----|-------------|--------|
 | **NFR1** | Isolation | Code user A không truy cập file/process user B (Judge0 container sandbox) |
 | **NFR2** | Resource Limit | Execution time max 10s, Memory max 256MB |
-| **NFR3** | Concurrency | Hỗ trợ ≥10 concurrent submissions, queue nếu vượt; nếu hàng đợi đã đầy thì trả về `503 Service Unavailable` với thông báo rõ ràng, không được drop request silently |
+| **NFR3** | Concurrency | Hỗ trợ ≥10 concurrent submissions từ các user khác nhau; queue nếu vượt. Mỗi user chỉ được có 1 submission ở trạng thái `PENDING` tại một thời điểm; nếu hàng đợi đã đầy thì trả về `503 Service Unavailable` với thông báo rõ ràng, không được drop request silently |
 | **NFR4** | Response Time | Non-execution API response < 500ms; execution create endpoints (`POST /run`, `POST /submit`) < 500ms vì chỉ enqueue và trả `submission_id`; async execution/grading completion và polling/read-result APIs không thuộc SLA 500ms; page load < 2s |
 | **NFR5** | Realtime Latency | Sync delay < 1 giây |
 | **NFR6** | Security | Sandbox chặn fork/network call, JWT auth, HTTPS |
 | **NFR7** | Availability | Judge0 down → hiển thị error rõ ràng, auto-retry, không crash system |
 | **NFR8** | Database ACID | PostgreSQL transactions, data consistency |
-| **NFR9** | Session Continuity | Realtime session giữ trạng thái tối đa 5 phút sau khi coder disconnect; nếu coder reconnect trước timeout thì session tiếp tục, quá 5 phút thì auto-close |
+| **NFR9** | Session Continuity | Realtime session giữ trạng thái tối đa 5 phút sau khi coder disconnect; nếu coder reconnect trước timeout thì session tiếp tục, quá 5 phút thì auto-close. **Implementation note:** Backend phải có một scheduled job chạy mỗi 1 phút để query các session có `status = ACTIVE`, `last_activity_at < NOW() - 5 minutes`, và coder hiện không có WebSocket connection. Các session này bị set `status = CLOSED`, `ended_at = NOW()`, và broadcast event `session_closed` với `reason = "idle_timeout"` đến tất cả viewer đang kết nối. |
 
 ---
 

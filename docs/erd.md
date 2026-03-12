@@ -269,6 +269,7 @@ The **parent record** for both free runs and graded submits. Stores the source c
 - `INDEX idx_submissions_status ON submissions(overall_status)` — filter by status
 - `INDEX idx_submissions_type ON submissions(type)` — separate RUN vs SUBMIT queries
 - `INDEX idx_submissions_created_at ON submissions(created_at DESC)` — admin timeline queries
+- `UNIQUE INDEX idx_submissions_one_pending_per_user ON submissions(user_id) WHERE overall_status = 'PENDING'` — hard-enforces at most one active pending submission per user
 
 **How it works:**
 
@@ -283,6 +284,8 @@ The **parent record** for both free runs and graded submits. Stores the source c
 - `started_at`: worker begins execution
 - `completed_at`: final result available
 - `updated_at`: latest state transition
+
+**Concurrency enforcement:** Backend phải vừa check ở service layer vừa dựa vào partial unique index `idx_submissions_one_pending_per_user` để chặn race condition khi nhiều request đồng thời từ cùng một user cùng cố tạo `PENDING` submission.
 
 **User Story Mapping:** US06, US09, US12
 
@@ -351,8 +354,10 @@ Realtime coding sessions. Coder creates, Viewers join. Stores latest code snapsh
 3. `last_activity_at` tracked from realtime/editor activity
 4. Coder disconnects → session remains recoverable for 5 minutes
 5. If coder reconnects within 5 minutes → continue same session
-6. If not → auto-close and set `ended_at`
+6. If not → scheduled job (runs every 60s) detects stale session, sets `status = CLOSED`, sets `ended_at = NOW()`, and broadcasts `session_closed` to remaining viewers
 7. Coder clicks "End Session" → `status = CLOSED`, `ended_at = NOW()`
+
+**Auto-close worker rule:** Chỉ đóng session khi đồng thời thỏa 2 điều kiện: `last_activity_at < NOW() - 5 minutes` và coder không còn active WebSocket connection.
 
 **User Story Mapping:** US13, US14, US14.1
 
@@ -385,7 +390,7 @@ Short-lived ordered event buffer for reconnect catch-up. Clients reconnect with 
 
 ### 2.8 `session_viewers`
 
-Join table tracking which viewers are/were in a session. Supports viewer count and history for public-by-link sessions.
+Join table tracking which viewers are/were in a session. Supports viewer count and history for public-by-link sessions. Chỉ user có role `VIEWER` hoặc `ADMIN` mới được ghi vào bảng này; `CODER` không được join session của coder khác.
 
 | Column | Type | Constraints | Description |
 |--------|------|-------------|-------------|
