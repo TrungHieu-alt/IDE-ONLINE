@@ -28,6 +28,7 @@ Mức này mô tả các tác nhân chính tương tác với hệ thống gồm
 - **Viewer**: theo dõi code realtime với quyền chỉ xem
 - **Admin**: quản lý người dùng và câu hỏi
 - **Judge0**: hệ thống thực thi code sandbox bên ngoài
+- **Email Service**: hệ thống ngoài dùng để gửi email verify account và các email hệ thống
 
 ![System Context](../assets/Context%20Diagram%20%28Current%29.svg)
 
@@ -42,6 +43,7 @@ Mức container thể hiện các khối chính trong hệ thống:
 - **Realtime Gateway**: đồng bộ code realtime qua WebSocket
 - **PostgreSQL**: lưu user, question, submission, session data
 - **Judge0**: thực thi source code trong môi trường sandbox
+- **Email Service**: dịch vụ gửi email verification/notification từ backend
 
 ![Container Diagram](../assets/Online%20Code%20Editor%20App%20Diagram%20%28Current%29.svg)
 
@@ -68,7 +70,9 @@ Mức này mô tả các nhóm thành phần backend phục vụ:
 - question/test case management
 - submission/execution flow
 - realtime session handling
+- integration nội bộ giữa Submission Module và Collaboration Module qua `EventEmitter2`
 - integration với PostgreSQL, Frontend và Judge0
+- integration với Email Service cho verification flow
 
 ![Backend Component Diagram](../assets/Backend%20Component%20Diagram%20%28Current%29.svg)
 
@@ -79,3 +83,6 @@ Mức này mô tả các nhóm thành phần backend phục vụ:
 - Các sơ đồ SVG được lưu trong thư mục `assets/`
 - Tài liệu này dùng để tham chiếu cùng với `requirement.md`, `api-spec.md` và `erd.md`
 - Nếu cập nhật sơ đồ trong `assets`, file Markdown này vẫn dùng lại cùng đường dẫn asset hiện tại
+- Context Diagram và Container Diagram phải thể hiện thêm `Email Service` như external dependency dù MVP chưa implement gửi mail đầy đủ
+- Backend Component Diagram cần có mũi tên `Submission Module -> Collaboration Module` với label `internal event (EventEmitter2)`
+- Backend Component Diagram cần có note: `Collaboration Module` luôn check session active trước khi broadcast realtime event

@@ -118,7 +118,7 @@ ACCEPTANCE CRITERIA:
 - [ ] Permission matrix rõ ràng:
   - ADMIN: tất cả endpoints
   - CODER: viết code, run, submit, xem lịch sử riêng
-  - CODER có thể join session public-by-link của coder khác với quyền read-only
+  - CODER không được join session của coder khác
   - VIEWER: xem code realtime (trong session), NOT edit
 
 - [ ] Endpoint gán role: `PATCH /api/admin/users/{user_id}/role`
@@ -163,6 +163,7 @@ ACCEPTANCE CRITERIA:
 - [ ] Auto-save draft code:
   - Save vào browser's IndexedDB mỗi 3 giây
   - Khi refresh page → recover draft từ IndexedDB
+  - Nếu `Run`/`Submit` bị từ chối với `503 Service Unavailable` do queue full, draft trong IndexedDB phải được giữ nguyên để user retry sau
   - Clear draft khi user explicitly submit
 
 - [ ] Sử dụng Monaco Editor (VS Code engine)
@@ -289,6 +290,11 @@ ACCEPTANCE CRITERIA:
   - Show spinner + progress indicator
   - Re-enable khi execution complete
 
+- [ ] Server-side concurrency guard:
+  - Nếu user đã có submission trạng thái `PENDING` thì backend reject request `Run` mới
+  - Không chỉ rely vào button disable ở frontend
+  - Response: `409 Conflict` với message rõ ràng để tránh tạo nhiều execution đồng thời cho cùng user
+
 - [ ] Timeout handling:
   - Code không return sau 10s → kill process
   - Return status `TIME_LIMIT_EXCEEDED`
@@ -359,6 +365,10 @@ ACCEPTANCE CRITERIA:
   - Hidden test cases (output hidden)
   - Timeout per test case: 10 seconds
   - Continue next test even if one fails
+
+- [ ] Output comparison rule:
+  - Trim whitespace ở đầu/cuối của cả `actual_output` và `expected_output` trước khi compare
+  - Logic trim được thực hiện phía server để nhất quán cho mọi ngôn ngữ
 
 - [ ] Overall status determination:
   - Nếu ALL PASS → `ACCEPTED` ✅
@@ -569,8 +579,8 @@ ACCEPTANCE CRITERIA:
   - User authenticated: `401 Unauthorized` if not logged in
 
 - [ ] Permission check:
-  - Session public-by-link cho user đã đăng nhập có role VIEWER, CODER hoặc ADMIN
-  - Nếu user là coder khác tham gia bằng link → chỉ có quyền read-only như viewer
+  - Session public-by-link cho user đã đăng nhập có role VIEWER hoặc ADMIN
+  - User có role CODER không được join session của coder khác
   - Return: `403` if permission denied
 
 - [ ] Join response:
@@ -589,6 +599,11 @@ ACCEPTANCE CRITERIA:
 - [ ] Error handling:
   - Session not found: "❌ Session không tồn tại"
   - Session ended: "❌ Coding session đã kết thúc"
+
+- [ ] Reconnect during coder grace period:
+  - Nếu viewer reconnect khi coder đang tạm disconnect nhưng session vẫn còn trong grace period 5 phút, viewer vẫn được join lại
+  - Join response phải trả snapshot code mới nhất + trạng thái coder `offline`
+  - Sau khi grace period hết hạn và session auto-close, request join mới phải trả `410 Gone`
 
 ---
 

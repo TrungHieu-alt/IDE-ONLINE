@@ -169,10 +169,10 @@ Sau nhiều lần gửi nhận event, code đang hiển thị ở Viewer dần d
 Điều này có thể xảy ra do network drop thầm lặng, một event bị mất mà không ai biết. Viewer vẫn nghĩ mình đang xem đúng code của Coder nhưng thực ra đã lệch.
 
 **Giải pháp**
-Mỗi 10 giây, client tính checksum của code đang hiển thị và so sánh với checksum server cung cấp qua WebSocket. Nếu không khớp, client tự động lấy lại toàn bộ snapshot code từ server — thao tác này trong suốt với người dùng.
+Mỗi 10 giây, client tính checksum của code đang hiển thị và so sánh với checksum server cung cấp qua WebSocket. Nếu không khớp, client tự động lấy lại toàn bộ snapshot code từ server — thao tác này trong suốt với người dùng. Snapshot trả về phải kèm `version` và checksum để client verify lại trước khi apply. Nếu snapshot lấy về vẫn fail checksum hoặc parse lỗi, client giữ nguyên bản đang hiển thị, báo trạng thái "sync corrupted", và retry lấy snapshot mới thay vì ghi đè dữ liệu có thể đã hỏng.
 
 **Kiểm tra**
-Giả lập mất một event, để 10 giây trôi qua, xác nhận Viewer tự đồng bộ lại về đúng trạng thái của server.
+Giả lập mất một event, để 10 giây trôi qua, xác nhận Viewer tự đồng bộ lại về đúng trạng thái của server. Giả lập snapshot corruption ở DB hoặc payload lỗi, xác nhận client không apply snapshot hỏng và tiếp tục retry đến khi lấy được snapshot hợp lệ.
 
 ---
 
@@ -214,6 +214,9 @@ Mỗi submission được tạo trong một database transaction riêng — bao 
 **Kiểm tra**
 Gửi 5 request submit đồng thời từ cùng một tài khoản. Sau đó đếm số bản ghi trong database — phải đúng bằng 5, mỗi bản ghi phải có đủ thông tin, không có bản ghi nào bị thiếu kết quả.
 
+**Tương tác với Case 10**
+Nếu người dùng refresh trang đúng lúc callback của Judge0 vẫn đang nằm trong retry queue, frontend không được tạo submission mới chỉ vì mất trạng thái nút disable cũ. Sau khi reload, client phải query lại submission `PENDING` gần nhất của user và re-subscribe vào luồng cập nhật của submission đó trước khi cho phép bấm Run tiếp.
+
 ---
 
 ### Case 10 — Callback từ Judge0 về trước DB ghi xong
@@ -231,6 +234,9 @@ Callback handler được thiết kế theo kiểu idempotent: khi nhận callba
 
 **Kiểm tra**
 Giả lập callback về trước khi DB insert hoàn tất. Kết quả cuối cùng phải là đúng một bản ghi submission với đầy đủ thông tin kết quả, không được có hai bản ghi trùng nhau.
+
+**Tương tác với Case 9**
+Nếu user refresh trang trong lúc callback đang retry, retry queue vẫn tiếp tục xử lý độc lập phía server. Khi frontend tải lại, trạng thái đúng phải được khôi phục từ DB: nếu submission vẫn `PENDING` thì UI tiếp tục hiển thị trạng thái chờ; nếu callback đã cập nhật xong thì UI hiển thị kết quả cuối. Refresh không được làm mất callback, tạo callback duplicate, hay khiến user vô tình enqueue thêm submission mới.
 
 ---
 

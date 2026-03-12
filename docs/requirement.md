@@ -66,7 +66,7 @@ Platform cho phép người dùng viết code online với nhiều ngôn ngữ l
 | **F7** | User Login | Login với access token + refresh token rotation để support remember session |
 | **F8** | Role Assignment | Admin gán role (Admin/Coder/Viewer) cho user |
 | **F9** | Execution History | Lưu & display history cho cả `RUN` và `SUBMIT`: question, type, code, language, status, execution time, memory, timestamp |
-| **F10** | Admin Dashboard | Xem tất cả submission, filter by user/question/date |
+| **F10** | Admin Dashboard & Execution Controls | Xem tất cả submission, filter by user/question/date, và cấu hình giới hạn số lần `Run` theo từng user |
 
 ---
 
@@ -76,7 +76,7 @@ Platform cho phép người dùng viết code online với nhiều ngôn ngữ l
 |----|-------------|--------|
 | **NFR1** | Isolation | Code user A không truy cập file/process user B (Judge0 container sandbox) |
 | **NFR2** | Resource Limit | Execution time max 10s, Memory max 256MB |
-| **NFR3** | Concurrency | Hỗ trợ ≥10 concurrent submissions, queue nếu vượt |
+| **NFR3** | Concurrency | Hỗ trợ ≥10 concurrent submissions, queue nếu vượt; nếu hàng đợi đã đầy thì trả về `503 Service Unavailable` với thông báo rõ ràng, không được drop request silently |
 | **NFR4** | Response Time | Non-execution API response < 500ms; execution create endpoints (`POST /run`, `POST /submit`) < 500ms vì chỉ enqueue và trả `submission_id`; async execution/grading completion và polling/read-result APIs không thuộc SLA 500ms; page load < 2s |
 | **NFR5** | Realtime Latency | Sync delay < 1 giây |
 | **NFR6** | Security | Sandbox chặn fork/network call, JWT auth, HTTPS |
@@ -123,12 +123,13 @@ Platform cho phép người dùng viết code online với nhiều ngôn ngữ l
 | | Phân quyền (gán role) | ❌ | ❌ | ✅ |
 | **System / Monitoring** | Xem dashboard hệ thống | ❌ | ❌ | ✅ |
 | | Xem tất cả logs / execution metrics | ❌ | ❌ | ✅ |
+| | Cấu hình giới hạn số lần `Run` theo user | ❌ | ❌ | ✅ |
 
 ---
 
 ## Chú thích
 
-**⚠️ Coder xem kết quả realtime:** Chỉ session của chính mình hoặc session công khai qua link mà user đang theo dõi
+**⚠️ Coder xem kết quả realtime:** Chỉ execution/session của chính mình
 
 **⚠️ Coder dừng execution:** Chỉ execution của chính mình
 
