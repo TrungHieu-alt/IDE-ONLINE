@@ -155,29 +155,26 @@ Platform cho phép người dùng viết code online với nhiều ngôn ngữ l
 
 ## 8. SYSTEM ARCHITECTURE
 
-```
-┌─────────────────────────────────────────────────────┐
-│           Frontend (React.js)                       │
-│  - Monaco Editor                                    │
-│  - WebSocket client                                 │
-│  - Real-time sync                                   │
-└────────────────┬────────────────────────────────────┘
-                 │ REST API + WebSocket
-┌────────────────▼────────────────────────────────────┐
-│           Backend (NestJS)                          │
-│  - Auth Controller                                  │
-│  - Code Editor Service                              │
-│  - Question Service                                 │
-│  - Submission Service                               │
-│  - WebSocket Gateway                                │
-└────────────────┬────────────────────────────────────┘
-                 │
-    ┌────────────┼────────────┐
-    │            │            │
-┌───▼──┐    ┌────▼─────┐   ┌──▼────────┐
-│Judge0│    │PostgreSQL│   │Redis(opt) │
-│      │    │(DB)      │   │(Cache)    │
-└──────┘    └──────────┘    ───────────┘
+```mermaid
+graph TD
+    A["Frontend<br/>(React.js)<br/>━━━━━━━━━━<br/>• Monaco Editor<br/>• WebSocket client<br/>• Real-time sync"]
+    
+    B["Backend<br/>(NestJS)<br/>━━━━━━━━━━<br/>• Auth Controller<br/>• Code Editor Service<br/>• Question Service<br/>• Submission Service<br/>• WebSocket Gateway"]
+    
+    C["Judge0<br/>(Code Execution)"]
+    D["PostgreSQL<br/>(Database)"]
+    E["Redis<br/>(Cache)"]
+    
+    A -->|REST API<br/>+ WebSocket| B
+    B -->|Execute Code| C
+    B -->|Read/Write| D
+    B -->|Cache| E
+    
+    style A fill:#e1f5ff
+    style B fill:#f3e5f5
+    style C fill:#ffe0b2
+    style D fill:#c8e6c9
+    style E fill:#ffccbc
 ```
 
 ## 9. KEY DESIGN DECISIONS
@@ -193,7 +190,47 @@ Platform cho phép người dùng viết code online với nhiều ngôn ngữ l
 
 ---
 
-## 15. SUCCESS CRITERIA
+## 10. EDGE CASES
+| #  | Edge Case                                                | Nhóm      | Severity    | Ảnh hưởng                                                |
+| -- | -------------------------------------------------------- | --------- | ----------- | -------------------------------------------------------- |
+| 1  | Output có khoảng trắng thừa (trước/sau hoặc dòng trống)  | Execution | 🟡 HIGH     | Có thể bị chấm WA dù logic đúng                          |
+| 2  | Sai số số thực (floating point precision)                | Execution | 🟢 LOW      | Chưa áp dụng trong MVP, dùng khi hỗ trợ tolerant judging |
+| 3  | Output quá lớn (>100KB)                                  | Execution | 🔴 CRITICAL | Có thể làm hệ thống crash hoặc vượt giới hạn output      |
+| 4  | Thời gian chạy sát giới hạn (9.9s vs 10.1s)              | Execution | 🟡 HIGH     | Ảnh hưởng đến tính công bằng khi chấm                    |
+| 5  | Event realtime đến sai thứ tự                            | Realtime  | 🔴 CRITICAL | Người xem có thể thấy code bị sai hoặc nhảy dòng         |
+| 6  | Event realtime bị gửi lặp                                | Realtime  | 🔴 CRITICAL | Code bị duplicate hoặc hiển thị sai                      |
+| 7  | Code giữa client và server bị lệch (checksum không khớp) | Realtime  | 🟡 HIGH     | Code hiển thị không đồng bộ                              |
+| 8  | Mất kết nối mạng trong ~30s                              | Realtime  | 🟡 HIGH     | Có thể mất một số update                                 |
+| 9  | Người dùng submit nhiều lần cùng lúc (spam click)        | Database  | 🔴 CRITICAL | Thống kê submission bị sai                               |
+| 10 | Race condition khi Judge0 callback                       | Database  | 🔴 CRITICAL | Có thể tạo submission trùng hoặc bị mất                  |
+| 11 | JWT bị chỉnh sửa (tampered signature)                    | Auth      | 🔴 CRITICAL | Có thể bypass authentication                             |
+| 12 | Viewer cố gắng chỉnh sửa code                            | Realtime  | 🔴 CRITICAL | Vi phạm bảo mật                                          |
+
+## 11. USER STORIES
+| # | ID | Tên | Epic |
+|---|----|----|------|
+| 1 | US01 | Đăng Ký Tài Khoản | Auth |
+| 2 | US02 | Đăng Nhập | Auth |
+| 3 | US03 | Phân Quyền RBAC | Auth |
+| 4 | US04 | Web Code Editor | Editor |
+| 5 | US05 | Chọn Ngôn Ngữ | Editor |
+| 6 | US04.1 | Input/Output Management | Editor |
+| 7 | US06 | Chạy Code (Run) | Execution |
+| 8 | US07 | Hiển Thị Lỗi | Execution |
+| 9 | US12 | Auto-Grading | Execution |
+| 10 | US12.1 | Grading Results Display | Execution |
+| 11 | US10 | Tạo Câu Hỏi | Content |
+| 12 | US11 | Quản Lý Test Cases | Content |
+| 13 | US14 | Tạo Coding Session | Collaboration |
+| 14 | US14.1 | Join Session (Viewer) | Collaboration |
+| 15 | US13 | Code Sync Realtime | Collaboration |
+| 16 | US13.1 | Result Sync Realtime | Collaboration |
+| 17 | US09 | View Submission History | History |
+| 18 | US16 | Admin Dashboard | History |
+| 19 | US17 | Sandbox Isolation | Security |
+---
+
+## 12. SUCCESS CRITERIA
 
 ✅ User đăng ký, verify email, login, refresh session, chọn câu hỏi  
 ✅ Viết code, click Run/Submit, nhận `submission_id` ngay và theo dõi kết quả async qua WebSocket  
@@ -211,6 +248,11 @@ Platform cho phép người dùng viết code online với nhiều ngôn ngữ l
 **Document Owner:** Project Team  
 **Last Updated:** March 2026  
 **Review Date:** TBD
+
+
+
+
+
 
 
 
