@@ -1,0 +1,15 @@
+{
+  "packageManager": "pnpm@10.29.2",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently -n frontend,backend -c cyan,green \"pnpm dev:frontend\" \"pnpm dev:backend\"",
+    "dev:frontend": "pnpm --dir frontend dev",
+    "dev:backend": "pnpm --dir backend start:dev",
+    "build": "pnpm build:frontend && pnpm build:backend",
+    "build:frontend": "pnpm --dir frontend build",
+    "build:backend": "pnpm --dir backend build"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}
