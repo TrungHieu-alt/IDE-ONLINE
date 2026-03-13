@@ -8,6 +8,10 @@ describe('AppController (e2e)', () => {
   let app: INestApplication<App>;
 
   beforeEach(async () => {
+    process.env.DATABASE_URL ??=
+      'postgres://postgres:postgres@127.0.0.1:5432/ide_online_test';
+    process.env.DATABASE_SSL ??= 'false';
+
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
     }).compile();

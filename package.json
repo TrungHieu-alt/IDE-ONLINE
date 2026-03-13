@@ -2,6 +2,9 @@
   "packageManager": "pnpm@10.29.2",
   "private": true,
   "scripts": {
+    "db:init": "bash -lc 'mkdir -p .data/postgres && [ -f .data/postgres/PG_VERSION ] || initdb -D .data/postgres --username=postgres --auth=trust'",
+    "db:start": "bash -lc 'mkdir -p .data/postgres .tmp && pg_ctl -D .data/postgres -l .tmp/postgres.log -o \"-p 5432 -k $(pwd)/.tmp\" start'",
+    "db:stop": "bash -lc 'pg_ctl -D .data/postgres stop'",
     "dev": "concurrently -n frontend,backend -c cyan,green \"pnpm dev:frontend\" \"pnpm dev:backend\"",
     "dev:frontend": "pnpm --dir frontend dev",
     "dev:backend": "pnpm --dir backend start:dev",

@@ -18,7 +18,7 @@ All project docs live in `/docs`. Read `docs/progress.md` and relevant docs befo
 
 ## Rules
 
-- Before executing, provide a brief plan and ask the user for confirmation.
+- Before executing large scope tasks, provide a brief plan and ask the user for confirmation.
 - Prefer vertical slices. For one feature, work on frontend and backend together when applicable.
 - Do not invent API or data model behavior that conflicts with `/docs`.
 - Ask clarifying questions when the request is vague, generic, or missing key constraints.
