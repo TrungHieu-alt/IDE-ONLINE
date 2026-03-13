@@ -2,7 +2,7 @@
 
 **Phiên bản:** 2.0  
 **Ngày cập nhật:** Tháng 3, 2026  
-**Tổng số:** 15 User Stories (MVP)
+**Tổng số:** 19 User Stories (MVP)
 
 ---
 
@@ -65,11 +65,20 @@ ACCEPTANCE CRITERIA:
   - Tìm user theo email (case-insensitive)
   - Verify password bằng bcrypt.compare()
 
-- [ ] Thành công → Trả về JWT token
-  - Token payload: `{user_id, email, role, iat, exp}`
-  - Token expiry: 24 giờ
+- [ ] Thành công → Trả về access token + refresh token
+  - Access token payload: `{user_id, email, role, auth_version, iat, exp}`
+  - Access token expiry: 15 phút
+  - Đồng thời trả về refresh token opaque
+  - Refresh token expiry: 30 ngày
   - HTTP `200 OK`
-  - Response: `{access_token, token_type: "Bearer", expires_in: 86400, user: {...}}`
+  - Response: `{access_token, refresh_token, token_type: "Bearer", expires_in: 900, refresh_expires_in: 2592000, user: {...}}`
+
+- [ ] Remember session bằng refresh token rotation
+  - Endpoint: `POST /api/auth/refresh`
+  - Refresh token hợp lệ → cấp access token mới + refresh token mới
+  - Nếu access token hiện tại chưa hết hạn mà vẫn gọi `/refresh` → vẫn accept và rotate bình thường
+  - Refresh token cũ bị revoke ngay sau khi rotate
+  - Logout → revoke refresh token
 
 - [ ] Thất bại → Trả về lỗi xác thực rõ ràng
   - Email không tồn tại → `401 Unauthorized`
@@ -109,6 +118,7 @@ ACCEPTANCE CRITERIA:
 - [ ] Permission matrix rõ ràng:
   - ADMIN: tất cả endpoints
   - CODER: viết code, run, submit, xem lịch sử riêng
+  - CODER không được join session của coder khác
   - VIEWER: xem code realtime (trong session), NOT edit
 
 - [ ] Endpoint gán role: `PATCH /api/admin/users/{user_id}/role`
@@ -153,6 +163,7 @@ ACCEPTANCE CRITERIA:
 - [ ] Auto-save draft code:
   - Save vào browser's IndexedDB mỗi 3 giây
   - Khi refresh page → recover draft từ IndexedDB
+  - Nếu `Run`/`Submit` bị từ chối với `503 Service Unavailable` do queue full, draft trong IndexedDB phải được giữ nguyên để user retry sau
   - Clear draft khi user explicitly submit
 
 - [ ] Sử dụng Monaco Editor (VS Code engine)
@@ -252,24 +263,24 @@ ACCEPTANCE CRITERIA:
   1. User nhấn "Run" button
   2. Frontend gửi: `POST /api/submissions/run`
   3. Body: `{source_code, language_id, stdin}`
-  4. Backend gửi request đến Judge0
-  5. Kết quả: stdout, stderr, status, time, memory
+  4. Backend tạo submission status `PENDING`, gửi request đến Judge0
+  5. API trả về ngay: `{submission_id, status: "PENDING"}`
+  6. Frontend chờ WebSocket event để nhận trạng thái và kết quả
+  7. Kết quả cuối: stdout, stderr, status, time, memory
 
 - [ ] Execution constraints:
   - Max time: 10 giây (wall-time)
   - Max memory: 256 MB
   - Nếu vượt → return `TIME_LIMIT_EXCEEDED` hoặc `MEMORY_LIMIT_EXCEEDED`
 
-- [ ] Response format (thành công):
+- [ ] Initial response format:
   ```json
   {
-    "status": "success",
-    "execution": {
-      "status": "Accepted",
-      "stdout": "15\n",
-      "stderr": "",
-      "execution_time": "0.123s",
-      "memory_used": "5.2MB"
+    "success": true,
+    "data": {
+      "submission_id": "sub-uuid",
+      "type": "RUN",
+      "status": "PENDING"
     }
   }
   ```
@@ -278,6 +289,12 @@ ACCEPTANCE CRITERIA:
   - While running → disable Run & Submit buttons
   - Show spinner + progress indicator
   - Re-enable khi execution complete
+
+- [ ] Server-side concurrency guard:
+  - Mỗi user chỉ được có 1 submission `PENDING` tại một thời điểm
+  - Nếu user đã có `PENDING` submission thì backend reject request `Run` mới với `409 Conflict`
+  - Check này độc lập với button disable ở frontend
+  - Sau khi submission complete (bất kể `ACCEPTED` hay fail) thì user được submit/run tiếp
 
 - [ ] Timeout handling:
   - Code không return sau 10s → kill process
@@ -338,9 +355,11 @@ ACCEPTANCE CRITERIA:
   2. Frontend gửi: `POST /api/submissions/submit`
   3. Body: `{question_id, source_code, language_id}`
   4. Backend fetch câu hỏi + tất cả test cases (public + hidden)
-  5. Run code với mỗi test case
-  6. So sánh output với expected output
-  7. Aggregate kết quả
+  5. Backend tạo submission `PENDING` và queue grading
+  6. API trả về ngay `submission_id`
+  7. Run code với mỗi test case
+  8. So sánh output với expected output
+  9. Aggregate kết quả
 
 - [ ] Execute tất cả test cases:
   - Public test cases (visible output)
@@ -348,24 +367,30 @@ ACCEPTANCE CRITERIA:
   - Timeout per test case: 10 seconds
   - Continue next test even if one fails
 
+- [ ] Output comparison rule:
+  - Trim whitespace ở đầu/cuối của cả `actual_output` và `expected_output` trước khi compare
+  - Logic trim được thực hiện phía server để nhất quán cho mọi ngôn ngữ
+
 - [ ] Overall status determination:
   - Nếu ALL PASS → `ACCEPTED` ✅
-  - Nếu some fail → `WRONG_ANSWER` ⚠️
-  - Nếu any TLE → `TIME_LIMIT_EXCEEDED` ⏱️
-  - Nếu any RE → `RUNTIME_ERROR` ❌
+  - Nếu có bất kỳ time limit exceeded → `TIME_LIMIT_EXCEEDED` ⏱️
+  - Nếu có bất kỳ memory limit exceeded → `MEMORY_LIMIT_EXCEEDED` ⏱️
+  - Nếu có bất kỳ runtime error → `RUNTIME_ERROR` ❌
   - Nếu compile error → `COMPILATION_ERROR` ❌
+  - Nếu không có lỗi compile/runtime/resource nhưng output sai → `WRONG_ANSWER` ⚠️
+  - Priority rule: `COMPILATION_ERROR` > `RUNTIME_ERROR` > `TIME_LIMIT_EXCEEDED` > `MEMORY_LIMIT_EXCEEDED` > `WRONG_ANSWER` > `ACCEPTED`
 
-- [ ] Result format:
+- [ ] Final result format:
   ```json
   {
-    "overall_status": "Wrong Answer",
+    "overall_status": "WRONG_ANSWER",
     "passed_count": 5,
     "total_count": 8,
     "test_results": [
       {
         "test_case_id": "tc1",
         "is_hidden": false,
-        "status": "Accepted",
+        "status": "ACCEPTED",
         "expected_output": "15",
         "actual_output": "15",
         "execution_time": "0.12s"
@@ -433,9 +458,8 @@ ACCEPTANCE CRITERIA:
 - [ ] Question structure:
   - `title`: required, max 200 chars, min 5 chars
   - `description`: markdown, required, max 5000 chars
+    - Bao gồm problem statement, sample input, sample output, notes nếu có
   - `difficulty`: enum (EASY / MEDIUM / HARD)
-  - `sample_input`: optional, max 1000 chars
-  - `sample_output`: optional, max 1000 chars
   - `time_limit`: 1-10 seconds (default 1)
   - `memory_limit`: 32-256 MB (default 64)
   - `is_published`: boolean (default false)
@@ -451,7 +475,7 @@ ACCEPTANCE CRITERIA:
   - Client render markdown properly
 
 - [ ] Sample input/output:
-  - Optional nhưng recommended
+  - Nhúng trực tiếp trong `description` dưới dạng markdown/code block
   - Displayed to coder trước khi code
   - NOT used for grading
 
@@ -525,10 +549,11 @@ ACCEPTANCE CRITERIA:
   - `created_at`, `ended_at`
 
 - [ ] Session lifecycle:
-  - Active = coder connected
+  - Active = coder connected hoặc tạm mất kết nối nhưng chưa quá grace period
   - Multiple viewers can join
-  - Auto-closes 5 min after coder disconnect
-  - Coder can manually close
+  - Nếu coder reconnect trong vòng 5 phút sau disconnect → session tiếp tục, giữ nguyên code hiện tại
+  - Nếu coder không quay lại sau 5 phút → auto-close
+  - Coder có thể manually close bất kỳ lúc nào
 
 - [ ] Sharing:
   - Display session link prominently
@@ -555,8 +580,9 @@ ACCEPTANCE CRITERIA:
   - User authenticated: `401 Unauthorized` if not logged in
 
 - [ ] Permission check:
-  - VIEWER role required (or ADMIN/CODER)
-  - Return: `401` if permission denied
+  - Session public-by-link cho user đã đăng nhập có role VIEWER hoặc ADMIN
+  - User có role CODER không được join session của coder khác
+  - Return: `403` if permission denied
 
 - [ ] Join response:
   - `200 OK` + session data:
@@ -574,6 +600,11 @@ ACCEPTANCE CRITERIA:
 - [ ] Error handling:
   - Session not found: "❌ Session không tồn tại"
   - Session ended: "❌ Coding session đã kết thúc"
+
+- [ ] Reconnect during coder grace period:
+  - Nếu viewer reconnect khi coder đang tạm disconnect nhưng session vẫn còn trong grace period 5 phút, viewer vẫn được join lại
+  - Join response phải trả snapshot code mới nhất + trạng thái coder `offline`
+  - Sau khi grace period hết hạn và session auto-close, request join mới phải trả `410 Gone`
 
 ---
 
@@ -611,7 +642,7 @@ ACCEPTANCE CRITERIA:
 - [ ] Handle disconnections:
   - Network drop: show spinner, auto-reconnect every 3s
   - Max retry: 10 times
-  - Reconnect: catch up with latest code snapshot
+  - Reconnect: request missed events from last known version; nếu buffer không còn đủ thì fallback về latest snapshot
 
 ---
 
@@ -629,17 +660,17 @@ ACCEPTANCE CRITERIA:
 
 - [ ] Result broadcast:
   - After completion → `execution_completed` event
-  - Payload: status, stdout, stderr, time, memory
+  - Payload: `submission_id`, status, stdout, stderr, time, memory
   - Viewer sees: ✅ ACCEPTED, stdout, time, memory
 
 - [ ] Test case results (Submit):
   - When coder submit → broadcast: `grading_progress`
-  - Payload: `{test_cases_completed: 5, test_cases_total: 8}`
+  - Payload: `{submission_id, completed: 5, total: 8}`
   - Viewer sees: "Grading 5/8 test cases..."
 
 - [ ] Final result broadcast:
   - Event: `grading_completed`
-  - Payload: full grading result table
+  - Payload: `submission_id` + full grading result table
   - Viewer sees: test results với passed/failed
 
 - [ ] Viewer UI update:
@@ -652,22 +683,22 @@ ACCEPTANCE CRITERIA:
 
 ## 📊 HISTORY & DASHBOARD
 
-### US09 - Xem Lịch Sử Submission
+### US09 - Xem Lịch Sử Execution
 
 **AS A** Coder  
-**I WANT** Xem lại các bài đã nộp  
-**SO THAT** Theo dõi quá trình làm bài
+**I WANT** Xem lại các lần Run và Submit của mình  
+**SO THAT** Theo dõi quá trình làm bài và debug
 
 **ACCEPTANCE CRITERIA:**
 
-- [ ] Submission list:
+- [ ] Execution history list:
   - `GET /api/submissions` (my submissions)
-  - List all submissions by current user
-  - Fields: submission_id, question title, status, passed/total, timestamp
+  - List all `RUN` và `SUBMIT` của current user
+  - Fields: submission_id, type, question title, status, passed/total, timestamp
 
 - [ ] Pagination & filtering:
   - Pagination: default 20/page
-  - Filter by: question, date range, status
+  - Filter by: question, date range, status, type (`RUN`/`SUBMIT`)
   - Sort by: timestamp (newest first)
   - Search by: question title
 
