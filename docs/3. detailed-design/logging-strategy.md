@@ -293,3 +293,37 @@ Structured logs giúp dễ dàng:
 - tìm kiếm
 - phân tích
 - tích hợp với monitoring systems
+
+---
+
+# 10. Tính toán dung lượng lưu trữ Log (Capacity Estimation)
+
+Để chuẩn bị hạ tầng server hợp lý, hệ thống thực hiện ước tính dung lượng lưu trữ log dựa trên quy mô người dùng dự kiến.
+
+## 10.1 Giả định hệ thống (Assumptions)
+- **Lưu lượng người dùng:** 5 người phỏng vấn / tuần.
+- **Số lượng bài thi:** Mỗi người thực hiện 2 bài thi.
+- **Tổng số phiên (sessions):** 10 bài thi / tuần.
+- **Kích thước trung bình 1 dòng log (JSON):** ~1 KB (đã bao gồm các trường hợp log lỗi có kèm stack trace).
+
+## 10.2 Ước tính số lượng Log trên 1 bài thi
+Trong 1 bài thi (khoảng 30-45 phút), ước tính một ứng viên sẽ tạo ra:
+- **Auth & Realtime Session:** Đăng nhập, tạo phòng, người phỏng vấn join/leave (~10 logs).
+- **Code Execution:** Chạy thử code liên tục (~15 - 20 logs).
+- **Submission:** Nộp bài chính thức (~1 - 3 logs).
+- **Error/Security:** Các thao tác lỗi lặt vặt (~2 logs).
+👉 **Tổng cộng:** Làm tròn khoảng **50 dòng log / bài thi**.
+
+## 10.3 Tính toán dung lượng (Storage Volume)
+Dựa trên các giả định trên, khối lượng log sinh ra được tính toán như sau:
+
+| Thời gian | Số lượng bài thi | Tổng số dòng Log | Kích thước dự kiến |
+| :--- | :--- | :--- | :--- |
+| **1 Tuần** | 10 bài | 500 logs | ~ 500 KB |
+| **1 Tháng** (4 tuần) | 40 bài | 2,000 logs | ~ 2 MB |
+| **1 Năm** (52 tuần) | 520 bài | 26,000 logs | ~ 26 MB |
+
+## 10.4 Kết luận về hạ tầng
+- **Chi phí lưu trữ:** Với mức dung lượng sinh ra chỉ khoảng **26 MB/năm**, hệ thống hoàn toàn không gặp áp lực về không gian lưu trữ file log.
+- **Thực tế vận hành:** Kết hợp với **Chính sách lưu trữ (Retention Policy)** ở mục 6 (ví dụ: Application log tự động xóa sau 30 ngày), dung lượng log thực tế tồn tại trên ổ cứng tại một thời điểm chỉ dao động ở mức **1 - 2 MB**.
+- **Giải pháp:** Sử dụng ổ cứng SSD tiêu chuẩn (tối thiểu 20GB) của máy chủ hiện tại là dư sức đáp ứng, không cần thuê thêm các dịch vụ lưu trữ log chuyên dụng đắt tiền (như AWS CloudWatch, Datadog...) trong giai đoạn này.
