@@ -11,7 +11,7 @@
 
 ### Mục tiêu chính
 - ✅ Code chạy đúng (compile, execute, chấm điểm)
-- ✅ Đồng bộ realtime ổn định (coder → viewer)
+- ✅ Đồng bộ realtime ổn định (owner → viewer)
 - ✅ Bảo mật & cách ly dữ liệu (user A không access user B)
 - ✅ Xử lý lỗi khéo léo (Judge0 down, không crash hệ thống)
 - ✅ Hiệu suất & đồng thời (10+ submission cùng lúc)
@@ -28,7 +28,7 @@ Kiểm tra logic nhỏ, độc lập:
 - Chuẩn hóa output: trim whitespace, xử lý `\n`, `\r\n`, `\t`
 - Kiểm tra status submission: ACCEPTED, COMPILATION_ERROR, RUNTIME_ERROR, TIME_LIMIT_EXCEEDED, MEMORY_LIMIT_EXCEEDED
 - Validate access token (format đúng, chưa hết hạn, signature hợp lệ)
-- Kiểm tra quyền theo role (Viewer không chạy code, Coder không tạo câu hỏi)
+- Kiểm tra quyền theo role (Viewer không chạy code, User không tạo câu hỏi admin-only)
 
 **Công cụ:** Jest, Vitest  
 **Mục tiêu:** >80% code coverage cho business logic
@@ -41,7 +41,7 @@ expect(normalizeOutput("42\r\n")).toBe("42");
 
 // Test permission check
 expect(canRunCode("Viewer")).toBe(false);
-expect(canRunCode("Coder")).toBe(true);
+expect(canRunCode("Owner")).toBe(true);
 
 // Test floating point
 expect(compareFloat(0.33333334, 0.33333333, 1e-6)).toBe(true);
@@ -75,7 +75,7 @@ User login → access token valid → truy cập /api/submissions/submit
 1. **Lỗi Judge0 timeout**: Gửi code → Judge0 không phản hồi trong 30s → retry 3 lần (1s, 2s, 4s) → nếu vẫn fail → lưu trạng thái SYSTEM_ERROR
 2. **Database transaction fail**: Insert submission + execution_results trong 1 transaction → nếu insert result fail → rollback cả submission
 3. **Concurrent submit từ 1 user**: User click Run 5 lần nhanh → DB lưu 5 submission → verify `COUNT(*) = 5` trong `submissions`
-4. **Hidden test case security**: Truy vấn test case → DTO trả về cho coder KHÔNG chứa expected_output
+4. **Hidden test case security**: Truy vấn test case → DTO trả về cho user KHÔNG chứa expected_output
 
 **Công cụ:** Jest (mock API), Docker Compose (local Judge0), Postman  
 **Mục tiêu:** Cover tất cả happy path + main error scenario
@@ -92,7 +92,7 @@ Kiểm tra toàn bộ flow người dùng:
 - Dùng access token để truy cập các API protected
 
 **Flow 2: Chạy Code (Happy Path)**
-- Coder chọn câu hỏi Python
+- User chọn câu hỏi Python
 - Viết code: `print("hello world")`
 - Click nút Run
 - Hệ thống gửi code đến Judge0
@@ -100,23 +100,23 @@ Kiểm tra toàn bộ flow người dùng:
 - Hệ thống so sánh output với expected → Accepted ✅
 
 **Flow 3: Lỗi Execution từ Judge0**
-- Coder viết code lỗi cú pháp → Judge0 trả Compile Error → hiển thị lỗi
-- Coder viết vòng lặp vô hạn → Judge0 timeout → trả `TIME_LIMIT_EXCEEDED` (>10 giây)
-- Coder dùng quá nhiều bộ nhớ → Judge0 trả `MEMORY_LIMIT_EXCEEDED` (>256MB)
+- User viết code lỗi cú pháp → Judge0 trả Compile Error → hiển thị lỗi
+- User viết vòng lặp vô hạn → Judge0 timeout → trả `TIME_LIMIT_EXCEEDED` (>10 giây)
+- User dùng quá nhiều bộ nhớ → Judge0 trả `MEMORY_LIMIT_EXCEEDED` (>256MB)
 
 **Flow 4: Đồng Bộ Realtime**
-- Coder gõ `def hello():`
+- Owner gõ `def hello():`
 - Trong vòng 1 giây → Viewer thấy code cập nhật
-- Test với 1 coder + 5 viewer cùng lúc
+- Test với 1 owner + 5 viewer cùng lúc
 - Viewer disconnect → reconnect → nhận full code snapshot
-- Coder disconnect < 5 phút rồi reconnect → session tiếp tục, giữ nguyên code hiện tại
-- Coder disconnect > 5 phút và không còn WebSocket connection → scheduled worker đóng session, broadcast `session_closed` với `reason = "idle_timeout"`
+- Owner disconnect < 5 phút rồi reconnect → session tiếp tục, giữ nguyên code hiện tại
+- Owner disconnect > 5 phút và không còn WebSocket connection → scheduled worker đóng session, broadcast `session_closed` với `reason = "idle_timeout"`
 
 **Flow 5: Admin Tạo Câu Hỏi & Chấm Điểm**
 - Admin tạo câu hỏi (title, description; sample input/output nhúng trong description)
 - Admin tạo test case ẩn (hidden) với expected output
-- Coder submit code → hệ thống so sánh output vs hidden expected
-- Coder KHÔNG thể thấy hidden expected output (API trả DTO khác)
+- User submit code → hệ thống so sánh output vs hidden expected
+- User KHÔNG thể thấy hidden expected output (API trả DTO khác)
 - Admin view dashboard → thấy tất cả submission và điểm
 
 **Công cụ:** Playwright, E2E test runner  
@@ -128,13 +128,13 @@ Kiểm tra toàn bộ flow người dùng:
 
 **Mục tiêu latency:**
 - Submit/Run create endpoint latency: P50 < 200ms, P95 < 500ms, P99 < 1000ms
-- Realtime sync latency: P50 < 300ms, P95 < 800ms (coder gõ → viewer thấy)
+- Realtime sync latency: P50 < 300ms, P95 < 800ms (owner gõ → viewer thấy)
 - Page load time: < 2 giây (first contentful paint)
 
 **Load test scenario:**
 - 10 user submit code cùng lúc → không timeout
 - 20 user submit code cùng lúc → queue hoạt động đúng
-- 1 coder + 5 viewer realtime → latency vẫn < 1 giây
+- 1 owner + 5 viewer realtime → latency vẫn < 1 giây
 
 **Công cụ:** K6, Lighthouse, Browser DevTools  
 **Benchmark:** Chạy baseline trước khi code, track regression sau mỗi change
@@ -158,7 +158,7 @@ Kiểm tra toàn bộ flow người dùng:
 - **Judge0 down**: Container bị kill → API trả error, UI hiển thị degraded mode
 - **Database timeout**: Query vượt 5s → retry, nếu vẫn fail → error message
 - **WebSocket disconnect**: Client tự động reconnect với exponential backoff
-- **Idle session auto-close**: giả lập coder mất kết nối và không reconnect; verify worker chạy mỗi 60s chỉ đóng session khi vừa quá 5 phút idle vừa không còn coder WebSocket connection
+- **Idle session auto-close**: giả lập owner mất kết nối và không reconnect; verify worker chạy mỗi 60s chỉ đóng session khi vừa quá 5 phút idle vừa không còn owner WebSocket connection
 - **Network latency**: Simulate 500ms delay → verify realtime vẫn < 1s
 - **Queue full**: 100 submission queue full → define rõ reject `503` hay tiếp tục queue với SLA khác
 
@@ -356,8 +356,8 @@ setTimeout(() => {
 **HTTP Status:** 403  
 **Ví dụ:**
 - Viewer cố chạy code
-- Coder xem submission của người khác
-- Coder cố join session của coder khác
+- User xem submission của người khác
+- User cố join session bằng join code sai hoặc khi sharing đã tắt
 - User thường cố tạo câu hỏi (admin only)
 
 **Message:** `"Bạn không có quyền thực hiện chức năng này."`
@@ -498,7 +498,7 @@ execution_time_ms, judge0_latency_ms, error_type, request_id
 - Manual penetration testing
 
 **Test Data:**
-- 1 Admin + 2 Coder + 2 Viewer
+- 1 Admin + 4 User
 - 3 sample questions (easy, medium, hard)
 - 5 test cases per question
 

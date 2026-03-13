@@ -24,8 +24,8 @@ Cấu trúc gồm 4 mức:
 
 Mức này mô tả các tác nhân chính tương tác với hệ thống gồm:
 
-- **Coder**: viết code, chạy code, submit bài
-- **Viewer**: theo dõi code realtime với quyền chỉ xem
+- **User**: viết code, chạy code, submit bài, tạo hoặc tham gia session
+- **Viewer**: vai trò trong session, theo dõi code realtime với quyền chỉ xem
 - **Admin**: quản lý người dùng và câu hỏi
 - **Judge0**: hệ thống thực thi code sandbox bên ngoài
 - **Email Service**: hệ thống ngoài dùng để gửi email verify account và các email hệ thống
@@ -38,7 +38,7 @@ Mức này mô tả các tác nhân chính tương tác với hệ thống gồm
 
 Mức container thể hiện các khối chính trong hệ thống:
 
-- **Frontend**: giao diện web cho coder/viewer/admin
+- **Frontend**: giao diện web cho user/viewer/admin
 - **Backend**: xử lý business logic, authentication, API và orchestration
 - **Realtime Gateway**: đồng bộ code realtime qua WebSocket
 - **PostgreSQL**: lưu user, question, submission, session data

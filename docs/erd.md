@@ -12,13 +12,13 @@
 ```mermaid
 erDiagram
     users ||--o{ submissions : "submits"
-    users ||--o{ sessions : "creates (as coder)"
-    users ||--o{ session_viewers : "joins (as viewer)"
+    users ||--o{ sessions : "creates (as owner)"
+    users ||--o{ session_participants : "joins"
     questions ||--o{ test_cases : "has"
     questions ||--o{ submissions : "receives"
     submissions ||--o{ execution_results : "contains"
     test_cases ||--o{ execution_results : "evaluated in"
-    sessions ||--o{ session_viewers : "has"
+    sessions ||--o{ session_participants : "has"
     sessions ||--o{ session_events : "buffers"
     sessions }o--|| users : "hosted by"
     sessions }o--o| questions : "optionally linked to"
@@ -28,7 +28,7 @@ erDiagram
         varchar email UK "NOT NULL, lowercase, unique"
         varchar password_hash "NOT NULL, bcrypt"
         varchar display_name "max 50 chars"
-        enum role "ADMIN | CODER | VIEWER, default CODER"
+        enum role "ADMIN | USER, default USER"
         boolean is_verified "default false"
         varchar verification_token "nullable"
         timestamp verification_expires_at "nullable"
@@ -102,9 +102,12 @@ erDiagram
 
     sessions {
         uuid id PK
-        uuid coder_id FK "→ users.id, NOT NULL, ON DELETE RESTRICT"
+        uuid owner_id FK "→ users.id, NOT NULL, ON DELETE RESTRICT"
         uuid question_id FK "→ questions.id, nullable"
         enum status "ACTIVE | CLOSED"
+        boolean sharing_enabled "default false"
+        varchar join_code "nullable, format XXXX-YYYY"
+        timestamp join_code_expires_at "nullable"
         text current_code "latest code snapshot"
         integer current_language_id "current language"
         integer current_version "default 0, monotonic sync version"
@@ -122,12 +125,14 @@ erDiagram
         timestamp created_at "NOT NULL"
     }
 
-    session_viewers {
+    session_participants {
         uuid id PK
         uuid session_id FK "→ sessions.id, NOT NULL"
         uuid user_id FK "→ users.id, NOT NULL, ON DELETE RESTRICT"
+        enum session_role "OWNER | VIEWER"
         timestamp joined_at "NOT NULL"
         timestamp left_at "nullable"
+        timestamp kicked_at "nullable"
     }
 
     refresh_tokens {
@@ -159,7 +164,7 @@ Admin delete is implemented as a soft delete (`deleted_at`, `is_active=false`) s
 | `email` | VARCHAR(255) | UNIQUE, NOT NULL | Normalized to lowercase |
 | `password_hash` | VARCHAR(255) | NOT NULL | bcrypt hash (salt rounds ≥ 10) |
 | `display_name` | VARCHAR(50) | nullable | Display name |
-| `role` | ENUM | NOT NULL, default `'CODER'` | `ADMIN` \| `CODER` \| `VIEWER` |
+| `role` | ENUM | NOT NULL, default `'USER'` | `ADMIN` \| `USER` |
 | `is_verified` | BOOLEAN | NOT NULL, default `false` | Email verification status |
 | `verification_token` | VARCHAR(255) | nullable | Token for email verification |
 | `verification_expires_at` | TIMESTAMP | nullable | Token expiry (24h from creation) |
@@ -181,7 +186,7 @@ Admin delete is implemented as a soft delete (`deleted_at`, `is_active=false`) s
 
 ### 2.2 `questions`
 
-Admin-managed coding problems. Only `is_published = true` questions are visible to Coder/Viewer.
+Admin-managed coding problems. Only `is_published = true` questions are visible to non-admin users.
 
 | Column | Type | Constraints | Description |
 |--------|------|-------------|-------------|
@@ -206,7 +211,7 @@ Admin-managed coding problems. Only `is_published = true` questions are visible 
 
 ### 2.3 `test_cases`
 
-Input/output pairs for auto-grading. Hidden test cases are used for grading but their expected output is never exposed to Coder/Viewer.
+Input/output pairs for auto-grading. Hidden test cases are used for grading but their expected output is never exposed to non-admin users.
 
 | Column | Type | Constraints | Description |
 |--------|------|-------------|-------------|
@@ -214,7 +219,7 @@ Input/output pairs for auto-grading. Hidden test cases are used for grading but 
 | `question_id` | UUID | FK → questions.id, NOT NULL, ON DELETE CASCADE | Parent question |
 | `input` | TEXT | NOT NULL | Test input (max 10,000 chars) |
 | `expected_output` | TEXT | NOT NULL | Expected output (max 10,000 chars) |
-| `is_hidden` | BOOLEAN | NOT NULL, default `false` | If true, output hidden from coder |
+| `is_hidden` | BOOLEAN | NOT NULL, default `false` | If true, output hidden from non-admin users |
 | `display_order` | INTEGER | NOT NULL, default `0` | Sort order |
 | `created_at` | TIMESTAMP | NOT NULL | Creation time |
 | `updated_at` | TIMESTAMP | NOT NULL | Last edit time |
@@ -329,35 +334,40 @@ Individual execution results. One row per run against custom input or per test c
 
 ### 2.6 `sessions`
 
-Realtime coding sessions. Coder creates, Viewers join. Stores latest code snapshot for late-joining viewers and tracks reconnect/auto-close lifecycle.
+Realtime coding sessions. Owner creates, Viewers join using an owner-issued join code. Stores latest code snapshot for late-joining viewers and tracks reconnect/auto-close lifecycle.
 
 | Column | Type | Constraints | Description |
 |--------|------|-------------|-------------|
-| `id` | UUID | PK | Session ID (shared as join link) |
-| `coder_id` | UUID | FK → users.id, NOT NULL, ON DELETE RESTRICT | Session host |
+| `id` | UUID | PK | Session ID |
+| `owner_id` | UUID | FK → users.id, NOT NULL, ON DELETE RESTRICT | Session host |
 | `question_id` | UUID | FK → questions.id, nullable | Linked question (optional) |
 | `status` | ENUM | NOT NULL, default `'ACTIVE'` | `ACTIVE` \| `CLOSED` |
+| `sharing_enabled` | BOOLEAN | NOT NULL, default `false` | Whether new viewers may join |
+| `join_code` | VARCHAR(9) | nullable, unique while active | Human-friendly sharing code `XXXX-YYYY` |
+| `join_code_expires_at` | TIMESTAMP | nullable | Optional join code expiry |
 | `current_code` | TEXT | nullable | Latest code snapshot for sync |
 | `current_language_id` | INTEGER | nullable | Current language in editor |
 | `current_version` | INTEGER | NOT NULL, default `0` | Latest applied sync version for ordering and recovery |
 | `created_at` | TIMESTAMP | NOT NULL | Session start |
-| `last_activity_at` | TIMESTAMP | nullable | Updated on coder change/run/submit for idle close policy and disconnect grace window |
+| `last_activity_at` | TIMESTAMP | nullable | Updated on owner change/run/submit for idle close policy and disconnect grace window |
 | `ended_at` | TIMESTAMP | nullable | Session end (when closed) |
 
 **Indexes:**
-- `INDEX idx_sessions_coder ON sessions(coder_id)`
+- `INDEX idx_sessions_owner ON sessions(owner_id)`
 - `INDEX idx_sessions_status ON sessions(status)`
+- `UNIQUE INDEX idx_sessions_join_code_active ON sessions(join_code) WHERE status = 'ACTIVE' AND sharing_enabled = true`
 
 **Lifecycle:**
-1. Coder creates → `status = ACTIVE`
-2. Viewers join via link
-3. `last_activity_at` tracked from realtime/editor activity
-4. Coder disconnects → session remains recoverable for 5 minutes
-5. If coder reconnects within 5 minutes → continue same session
-6. If not → scheduled job (runs every 60s) detects stale session, sets `status = CLOSED`, sets `ended_at = NOW()`, and broadcasts `session_closed` to remaining viewers
-7. Coder clicks "End Session" → `status = CLOSED`, `ended_at = NOW()`
+1. User creates → becomes `OWNER`, `status = ACTIVE`, `sharing_enabled = false`
+2. Owner opens sharing → backend generates `join_code`
+3. Viewers join via code/share link
+4. `last_activity_at` tracked from realtime/editor activity
+5. Owner disconnects → session remains recoverable for 5 minutes
+6. If owner reconnects within 5 minutes → continue same session
+7. If not → scheduled job (runs every 60s) detects stale session, sets `status = CLOSED`, sets `ended_at = NOW()`, disables sharing, and broadcasts `session_closed` to remaining viewers
+8. Owner clicks "End Session" → `status = CLOSED`, `sharing_enabled = false`, `join_code = NULL`, `ended_at = NOW()`
 
-**Auto-close worker rule:** Chỉ đóng session khi đồng thời thỏa 2 điều kiện: `last_activity_at < NOW() - 5 minutes` và coder không còn active WebSocket connection.
+**Auto-close worker rule:** Chỉ đóng session khi đồng thời thỏa 2 điều kiện: `last_activity_at < NOW() - 5 minutes` và owner không còn active WebSocket connection.
 
 **User Story Mapping:** US13, US14, US14.1
 
@@ -388,21 +398,24 @@ Short-lived ordered event buffer for reconnect catch-up. Clients reconnect with 
 
 ---
 
-### 2.8 `session_viewers`
+### 2.8 `session_participants`
 
-Join table tracking which viewers are/were in a session. Supports viewer count and history for public-by-link sessions. Chỉ user có role `VIEWER` hoặc `ADMIN` mới được ghi vào bảng này; `CODER` không được join session của coder khác.
+Join table tracking which users are/were in a session and their session-scoped role. Supports active participant list, viewer history, and owner kick actions.
 
 | Column | Type | Constraints | Description |
 |--------|------|-------------|-------------|
 | `id` | UUID | PK | Primary key |
 | `session_id` | UUID | FK → sessions.id, NOT NULL, ON DELETE CASCADE | Session |
-| `user_id` | UUID | FK → users.id, NOT NULL, ON DELETE RESTRICT | Viewer |
-| `joined_at` | TIMESTAMP | NOT NULL | When viewer joined |
-| `left_at` | TIMESTAMP | nullable | When viewer left (NULL = still watching) |
+| `user_id` | UUID | FK → users.id, NOT NULL, ON DELETE RESTRICT | Participant |
+| `session_role` | ENUM | NOT NULL | `OWNER` \| `VIEWER` |
+| `joined_at` | TIMESTAMP | NOT NULL | When participant joined |
+| `left_at` | TIMESTAMP | nullable | When participant left (NULL = still connected) |
+| `kicked_at` | TIMESTAMP | nullable | When owner/admin forcibly removed the participant |
 
 **Indexes:**
-- `UNIQUE INDEX idx_session_viewer_active ON session_viewers(session_id, user_id) WHERE left_at IS NULL` — one active join per viewer
-- `INDEX idx_session_viewers_session ON session_viewers(session_id)`
+- `UNIQUE INDEX idx_session_participant_active ON session_participants(session_id, user_id) WHERE left_at IS NULL` — one active join per participant
+- `INDEX idx_session_participants_session ON session_participants(session_id)`
+- `INDEX idx_session_participants_role ON session_participants(session_id, session_role)`
 
 **User Story Mapping:** US14.1
 
@@ -443,7 +456,7 @@ Stores hashed rotating refresh tokens used for remember-session flows.
 
 User-linked historical records are preserved by default:
 - Admin delete is a logical delete on `users`, not a physical row removal
-- `submissions.user_id`, `sessions.coder_id`, and `session_viewers.user_id` use `ON DELETE RESTRICT` for physical deletes
+- `submissions.user_id`, `sessions.owner_id`, and `session_participants.user_id` use `ON DELETE RESTRICT` for physical deletes
 - `questions.created_by` uses `ON DELETE SET NULL` because authored questions may outlive the admin account
 - `refresh_tokens.user_id` uses `ON DELETE CASCADE` for maintenance-time hard deletes
 

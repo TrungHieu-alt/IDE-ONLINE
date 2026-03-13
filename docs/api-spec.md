@@ -108,8 +108,7 @@ Paginated response wrapper:
 | Role | Description |
 |------|-------------|
 | `ADMIN` | Full system access |
-| `CODER` | Write code, run, submit |
-| `VIEWER` | Read-only, watch sessions |
+| `USER` | Standard product user: write code, run, submit, create/join sessions |
 
 ### Language ID Mapping
 
@@ -160,7 +159,7 @@ POST /api/auth/register
   "data": {
     "user_id": "550e8400-e29b-41d4-a716-446655440000",
     "email": "user@example.com",
-    "role": "CODER",
+    "role": "USER",
     "created_at": "2025-03-10T12:00:00Z"
   }
 }
@@ -177,7 +176,7 @@ POST /api/auth/register
 - Email normalized to lowercase before saving
 - Password hashed with bcrypt (salt rounds ≥ 10)
 - Verification email sent with 24h token
-- Default role: `CODER`
+- Default role: `USER`
 
 **User Story:** US01
 
@@ -292,7 +291,7 @@ POST /api/auth/login
       "user_id": "550e8400-e29b-41d4-a716-446655440000",
       "email": "user@example.com",
       "display_name": "John Doe",
-      "role": "CODER"
+      "role": "USER"
     }
   }
 }
@@ -426,7 +425,7 @@ GET /api/me
     "user_id": "550e8400-e29b-41d4-a716-446655440000",
     "email": "user@example.com",
     "display_name": "John Doe",
-    "role": "CODER",
+    "role": "USER",
     "is_verified": true,
     "created_at": "2025-03-10T12:00:00Z",
     "updated_at": "2025-03-10T12:00:00Z"
@@ -468,7 +467,7 @@ PATCH /api/me
     "user_id": "550e8400-...",
     "email": "user@example.com",
     "display_name": "Jane Doe",
-    "role": "CODER",
+    "role": "USER",
     "updated_at": "2025-03-10T13:00:00Z"
   }
 }
@@ -497,7 +496,7 @@ GET /api/admin/users
 
 | Param | Type | Description |
 |-------|------|-------------|
-| `role` | string | Filter by role: `ADMIN`, `CODER`, `VIEWER` |
+| `role` | string | Filter by role: `ADMIN`, `USER` |
 | `search` | string | Search by email or display_name |
 | `is_active` | boolean | Filter by account status |
 
@@ -510,7 +509,7 @@ GET /api/admin/users
       "user_id": "550e8400-...",
       "email": "user@example.com",
       "display_name": "John Doe",
-      "role": "CODER",
+      "role": "USER",
       "is_verified": true,
       "is_active": true,
       "created_at": "2025-03-10T12:00:00Z"
@@ -547,11 +546,11 @@ PATCH /api/admin/users/:user_id/role
 
 | Field | Type | Required | Validation |
 |-------|------|----------|------------|
-| `role` | string | ✅ | `ADMIN` \| `CODER` \| `VIEWER` |
+| `role` | string | ✅ | `ADMIN` \| `USER` |
 
 ```json
 {
-  "role": "VIEWER"
+  "role": "USER"
 }
 ```
 
@@ -562,7 +561,7 @@ PATCH /api/admin/users/:user_id/role
   "data": {
     "user_id": "550e8400-...",
     "email": "user@example.com",
-    "role": "VIEWER",
+    "role": "USER",
     "updated_at": "2025-03-10T13:00:00Z"
   }
 }
@@ -675,7 +674,7 @@ GET /api/questions
 | `search` | string | Search by title |
 
 **Notes:**
-- Coder/Viewer: only see `is_published = true`
+- User/Admin joiners: only see `is_published = true` outside admin endpoints
 - Admin: sees all questions (published + unpublished)
 
 **Response:** `200 OK` (paginated)
@@ -850,7 +849,7 @@ DELETE /api/admin/questions/:question_id
 
 ## 6. Test Cases
 
-### 6.1 List Test Cases (Public — for Coders)
+### 6.1 List Test Cases (Public — for Users)
 
 🔒 **All Roles**
 
@@ -883,7 +882,7 @@ GET /api/questions/:question_id/test_cases
 
 **Notes:**
 - Hidden test cases: `input` and `expected_output` are masked as `"[hidden]"`
-- Only shows existence + order (so coder knows how many hidden tests exist)
+- Only shows existence + order (so user knows how many hidden tests exist)
 
 **User Story:** US11
 
@@ -1011,7 +1010,7 @@ DELETE /api/admin/test_cases/:test_case_id
 
 ### 7.1 Run Code (Free Run)
 
-🔒 **Coder, Admin**
+🔒 **User, Admin**
 
 ```
 POST /api/submissions/run
@@ -1070,7 +1069,7 @@ POST /api/submissions/run
 
 ### 7.2 Submit Code (Auto-Grade)
 
-🔒 **Coder, Admin**
+🔒 **User, Admin**
 
 ```
 POST /api/submissions/submit
@@ -1110,7 +1109,7 @@ POST /api/submissions/submit
 **Notes on hidden test cases:**
 - `status` is always visible (ACCEPTED / WRONG_ANSWER / etc.)
 - `expected_output` and `actual_output` are masked as `"[hidden]"`
-- Coder can see pass/fail but NOT the actual test data
+- User can see pass/fail but NOT the actual test data
 
 **Overall status determination:**
 
@@ -1150,7 +1149,7 @@ Priority: COMPILATION_ERROR > RUNTIME_ERROR > TIME_LIMIT_EXCEEDED > MEMORY_LIMIT
 
 ### 8.1 List My Submissions
 
-🔒 **Coder**
+🔒 **User**
 
 ```
 GET /api/submissions
@@ -1201,7 +1200,7 @@ GET /api/submissions
 
 ### 8.2 Get Submission Detail
 
-🔒 **Coder** (own submissions), **Admin** (any submission)
+🔒 **User** (own submissions), **Admin** (any submission)
 
 ```
 GET /api/submissions/:submission_id
@@ -1246,7 +1245,7 @@ GET /api/submissions/:submission_id
 
 | Status | Code | When |
 |--------|------|------|
-| 403 | `FORBIDDEN` | Coder trying to view another user's submission |
+| 403 | `FORBIDDEN` | User trying to view another user's submission |
 | 404 | `SUBMISSION_NOT_FOUND` | ID doesn't exist |
 
 **Notes:**
@@ -1321,7 +1320,7 @@ GET /api/admin/submissions
 
 ### 9.1 Create Session
 
-🔒 **Coder**
+🔒 **User**
 
 ```
 POST /api/sessions
@@ -1345,10 +1344,11 @@ POST /api/sessions
   "success": true,
   "data": {
     "session_id": "ses-uuid-...",
-    "coder_id": "550e8400-...",
+    "owner_id": "550e8400-...",
     "status": "ACTIVE",
+    "sharing_enabled": false,
+    "join_code": null,
     "current_version": 0,
-    "join_url": "/session/ses-uuid-...",
     "websocket_url": "wss://api.example.com/ws/session/ses-uuid-...",
     "created_at": "2025-03-10T12:00:00Z"
   }
@@ -1359,12 +1359,58 @@ POST /api/sessions
 
 ---
 
-### 9.2 Get Session Info (Join)
+### 9.2 Open Sharing / Rotate Join Code
 
-🔒 **All Roles**
+🔒 **Owner** (own session), **Admin**
 
 ```
-GET /api/sessions/:session_id
+POST /api/sessions/:session_id/sharing/open
+```
+
+**Request Body:** optional
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `rotate_code` | boolean | ❌ | Force generate a new join code even if sharing is already on |
+| `expires_in_minutes` | integer | ❌ | Optional expiry for the join code |
+
+**Response:** `200 OK`
+```json
+{
+  "success": true,
+  "data": {
+    "session_id": "ses-uuid-...",
+    "sharing_enabled": true,
+    "join_code": "ABCD-EFGH",
+    "join_link": "/join/ABCD-EFGH",
+    "join_code_expires_at": "2025-03-10T12:30:00Z"
+  }
+}
+```
+
+**Errors:**
+
+| Status | Code | When |
+|--------|------|------|
+| 403 | `FORBIDDEN` | User is not the owner/admin of this session |
+| 404 | `SESSION_NOT_FOUND` | Session ID doesn't exist |
+| 410 | `SESSION_CLOSED` | Session has ended |
+
+**Notes:**
+- Opening sharing generates a join code if one does not already exist
+- Share link simply embeds the join code; there is no separate sharing architecture beyond that
+- Owner may rotate the code at any time to invalidate old links
+
+**User Story:** US14
+
+---
+
+### 9.3 Disable Sharing
+
+🔒 **Owner** (own session), **Admin**
+
+```
+POST /api/sessions/:session_id/sharing/close
 ```
 
 **Response:** `200 OK`
@@ -1373,7 +1419,47 @@ GET /api/sessions/:session_id
   "success": true,
   "data": {
     "session_id": "ses-uuid-...",
-    "coder": {
+    "sharing_enabled": false,
+    "join_code": null
+  }
+}
+```
+
+**Notes:**
+- Blocks new joins immediately
+- Existing viewers may either remain until owner closes/kicks them, or be disconnected immediately depending on final product policy; MVP should choose one and document it in implementation
+
+**User Story:** US14
+
+---
+
+### 9.4 Join Session by Code
+
+🔒 **All Roles**
+
+```
+POST /api/sessions/join
+```
+
+**Request Body:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `join_code` | string | ✅ | Format `XXXX-YYYY` |
+
+```json
+{
+  "join_code": "ABCD-EFGH"
+}
+```
+
+**Response:** `200 OK`
+```json
+{
+  "success": true,
+  "data": {
+    "session_id": "ses-uuid-...",
+    "owner": {
       "user_id": "550e8400-...",
       "display_name": "Alice"
     },
@@ -1381,6 +1467,7 @@ GET /api/sessions/:session_id
       "question_id": "a1b2c3d4-...",
       "title": "Two Sum"
     },
+    "session_role": "VIEWER",
     "status": "ACTIVE",
     "current_code": "print('hello')",
     "current_language_id": 71,
@@ -1402,23 +1489,86 @@ GET /api/sessions/:session_id
 
 | Status | Code | When |
 |--------|------|------|
-| 403 | `FORBIDDEN` | User does not have permission to join this session |
-| 404 | `SESSION_NOT_FOUND` | Session ID doesn't exist |
+| 403 | `FORBIDDEN` | Sharing disabled, user is already the owner, or user is blocked from joining |
+| 404 | `JOIN_CODE_NOT_FOUND` | Join code doesn't exist |
 | 410 | `SESSION_CLOSED` | Session has ended |
+| 410 | `JOIN_CODE_EXPIRED` | Join code expired |
 
 **Notes:**
 - `current_code` provides the latest snapshot for late-joining viewers
 - Viewer connects to `websocket_url` after this call
-- Session is public-by-link only for authenticated users with role `VIEWER` or `ADMIN`
-- Authenticated users with role `CODER` may only access their own hosted session, not join another coder's session as a viewer
+- Session is joinable only when owner has opened sharing and the join code is still valid
+- Authenticated `USER` or `ADMIN` may join as `VIEWER`
+- The share link just pre-fills the same `join_code`
 
 **User Story:** US14.1
 
 ---
 
-### 9.3 Close Session
+### 9.5 List Session Participants
 
-🔒 **Coder** (own session), **Admin**
+🔒 **Owner** (own session), **Admin**
+
+```
+GET /api/sessions/:session_id/participants
+```
+
+**Response:** `200 OK`
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "user_id": "550e8400-...",
+      "display_name": "Alice",
+      "session_role": "OWNER",
+      "joined_at": "2025-03-10T12:00:00Z"
+    },
+    {
+      "user_id": "viewer-uuid-...",
+      "display_name": "Bob",
+      "session_role": "VIEWER",
+      "joined_at": "2025-03-10T12:05:00Z"
+    }
+  ]
+}
+```
+
+**User Story:** US14.1
+
+---
+
+### 9.6 Kick Session Participant
+
+🔒 **Owner** (own session), **Admin**
+
+```
+POST /api/sessions/:session_id/participants/:user_id/kick
+```
+
+**Response:** `200 OK`
+```json
+{
+  "success": true,
+  "data": {
+    "session_id": "ses-uuid-...",
+    "user_id": "viewer-uuid-...",
+    "removed_at": "2025-03-10T12:10:00Z"
+  }
+}
+```
+
+**Notes:**
+- Owner cannot kick themselves through this endpoint
+- Server emits `removed_from_session` to the target viewer and updates participant list for the owner
+
+**User Story:** US14.1
+
+---
+
+### 9.7 Close Session
+
+🔒 **Owner** (own session), **Admin**
 
 ```
 PATCH /api/sessions/:session_id/close
@@ -1438,7 +1588,7 @@ PATCH /api/sessions/:session_id/close
 
 **Notes:**
 - Broadcasts `session_closed` event to all connected viewers
-- Also auto-triggered 5 minutes after coder disconnects
+- Also auto-triggered 5 minutes after owner disconnects
 
 **User Story:** US14
 
@@ -1467,7 +1617,8 @@ Sent by viewer after WebSocket connection established.
 {
   "event": "join_session",
   "data": {
-    "session_id": "ses-uuid-..."
+    "session_id": "ses-uuid-...",
+    "join_code": "ABCD-EFGH"
   }
 }
 ```
@@ -1475,8 +1626,9 @@ Sent by viewer after WebSocket connection established.
 **Server responds with:** `viewer_joined` broadcast + current code snapshot
 
 **Authorization rules:**
-- `VIEWER` and `ADMIN` may join any active session they are allowed to access by link
-- `CODER` may only attach to their own hosted session; joining another coder's session must be rejected
+- Authenticated `USER` and `ADMIN` may join as `VIEWER` when sharing is enabled and the join code is valid
+- Session owner may attach to their own hosted session without a join code
+- If user was kicked or sharing is disabled, server rejects the join
 
 **If forbidden:** server emits an error event and closes/refuses the join for that socket.
 
@@ -1509,7 +1661,7 @@ Sent when viewer intentionally disconnects.
 
 #### `code_changed`
 
-Sent by **Coder only** when code is modified. Debounced at 300ms on client side.
+Sent by **Owner only** when code is modified. Debounced at 300ms on client side.
 
 ```json
 {
@@ -1528,7 +1680,7 @@ Sent by **Coder only** when code is modified. Debounced at 300ms on client side.
 - Server updates `sessions.current_code`, `sessions.current_language_id`, `sessions.current_version`, and `sessions.last_activity_at`
 - Server appends the event to the short-lived session event buffer for reconnect catch-up
 - Server broadcasts `code_updated` to all viewers
-- If sender is not the session's coder → server ignores (read-only enforcement)
+- If sender is not the session's owner → server ignores (read-only enforcement)
 
 ---
 
@@ -1570,7 +1722,7 @@ Broadcast when a viewer disconnects.
 
 #### `code_updated`
 
-Broadcast to **Viewers** when coder's code changes.
+Broadcast to **Viewers** when owner's code changes.
 
 ```json
 {
@@ -1592,7 +1744,7 @@ Broadcast to **Viewers** when coder's code changes.
 
 #### `code_executing`
 
-Broadcast when coder clicks Run or Submit.
+Broadcast when owner clicks Run or Submit.
 
 ```json
 {
@@ -1625,7 +1777,7 @@ Broadcast when Run execution finishes.
 ```
 
 **Notes:**
-- Sent to the coder and all viewers in the session
+- Sent to the owner and all viewers in the session
 - Frontend uses `submission_id` to match the pending run request
 
 ---
@@ -1668,22 +1820,39 @@ Broadcast when all test cases finish.
 
 ---
 
+#### `removed_from_session`
+
+Broadcast to a viewer when owner/admin removes them from the session.
+
+```json
+{
+  "event": "removed_from_session",
+  "data": {
+    "session_id": "ses-uuid-...",
+    "reason": "kicked_by_owner",
+    "removed_at": "2025-03-10T12:10:00Z"
+  }
+}
+```
+
+---
+
 #### `session_closed`
 
-Broadcast when session ends (coder or admin closes, or auto-timeout).
+Broadcast when session ends (owner or admin closes, or auto-timeout).
 
 ```json
 {
   "event": "session_closed",
   "data": {
     "session_id": "ses-uuid-...",
-    "reason": "coder_closed",
+    "reason": "owner_closed",
     "ended_at": "2025-03-10T13:00:00Z"
   }
 }
 ```
 
-`reason` values: `coder_closed` | `admin_closed` | `idle_timeout`
+`reason` values: `owner_closed` | `admin_closed` | `idle_timeout`
 
 ---
 

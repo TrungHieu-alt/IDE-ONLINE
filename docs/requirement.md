@@ -51,7 +51,7 @@ Platform cho phép người dùng viết code online với nhiều ngôn ngữ l
 |-------------|------|----------------|
 | Project Supervisor | Project oversight | Định hướng mục tiêu dự án, review requirement document và đánh giá kết quả demo. |
 | Project Team | System development | Thiết kế, triển khai và tích hợp các thành phần của hệ thống như frontend, backend, realtime sync và code execution. |
-| End Users (Coder / Viewer) | Platform users | Sử dụng hệ thống để viết code, chạy chương trình và cung cấp feedback về trải nghiệm sử dụng. |
+| End Users (User / Viewer) | Platform users | Sử dụng hệ thống để viết code, chia sẻ session, tham gia xem session và cung cấp feedback về trải nghiệm sử dụng. |
 
 ## 4. FUNCTIONAL REQUIREMENTS
 
@@ -59,12 +59,12 @@ Platform cho phép người dùng viết code online với nhiều ngôn ngữ l
 |----|-------------|-------------|
 | **F1** | Code Editor | Web-based editor (Monaco) với syntax highlight cho 9 ngôn ngữ. Support chọn ngôn ngữ từ dropdown. |
 | **F2** | Code Execution | User click **Run/Submit** → backend tạo submission async, gửi code đến Judge0, trả về `submission_id` ngay và client nhận tiến trình/kết quả qua WebSocket. Cả `RUN` và `SUBMIT` đều được lưu để phục vụ history/audit, nhưng chỉ `SUBMIT` được tính là bài nộp chính thức theo câu hỏi. |
-| **F3** | Realtime Sync | Coder gõ code → Viewer thấy live realtime (1 chiều, debounce 300ms) |
+| **F3** | Realtime Sync | Session owner gõ code → Viewer thấy live realtime (1 chiều, debounce 300ms) |
 | **F4** | Question Management | Admin tạo/sửa/xóa câu hỏi (title, description markdown; sample input/output được nhúng trong description) |
 | **F5** | Test Case Management | Admin tạo hidden test case, hệ thống auto-compare output vs expected |
 | **F6** | User Registration | User đăng ký email/password, email verification |
 | **F7** | User Login | Login với access token + refresh token rotation để support remember session |
-| **F8** | Role Assignment | Admin gán role (Admin/Coder/Viewer) cho user |
+| **F8** | Role Assignment | Admin gán role toàn cục (Admin/User) cho user |
 | **F9** | Execution History | Lưu & display history cho cả `RUN` và `SUBMIT`: question, type, code, language, status, execution time, memory, timestamp |
 | **F10** | Admin Dashboard & Execution Controls | Xem tất cả submission, filter by user/question/date, và cấu hình giới hạn số lần `Run` theo từng user |
 
@@ -82,58 +82,62 @@ Platform cho phép người dùng viết code online với nhiều ngôn ngữ l
 | **NFR6** | Security | Sandbox chặn fork/network call, JWT auth, HTTPS |
 | **NFR7** | Availability | Judge0 down → hiển thị error rõ ràng, auto-retry, không crash system |
 | **NFR8** | Database ACID | PostgreSQL transactions, data consistency |
-| **NFR9** | Session Continuity | Realtime session giữ trạng thái tối đa 5 phút sau khi coder disconnect; nếu coder reconnect trước timeout thì session tiếp tục, quá 5 phút thì auto-close. **Implementation note:** Backend phải có một scheduled job chạy mỗi 1 phút để query các session có `status = ACTIVE`, `last_activity_at < NOW() - 5 minutes`, và coder hiện không có WebSocket connection. Các session này bị set `status = CLOSED`, `ended_at = NOW()`, và broadcast event `session_closed` với `reason = "idle_timeout"` đến tất cả viewer đang kết nối. |
+| **NFR9** | Session Continuity | Realtime session giữ trạng thái tối đa 5 phút sau khi session owner disconnect; nếu owner reconnect trước timeout thì session tiếp tục, quá 5 phút thì auto-close. **Implementation note:** Backend phải có một scheduled job chạy mỗi 1 phút để query các session có `status = ACTIVE`, `last_activity_at < NOW() - 5 minutes`, và owner hiện không có WebSocket connection. Các session này bị set `status = CLOSED`, `ended_at = NOW()`, `sharing_enabled = false`, và broadcast event `session_closed` với `reason = "idle_timeout"` đến tất cả viewer đang kết nối. |
 
 ---
 
 ## 6. USER ROLES & PERMISSIONS
-**Use Case:** Coder stream code, Viewer (interviewer) chỉ xem realtime
+**Use Case:** User mở live session với vai trò `OWNER`; user khác tham gia với vai trò `VIEWER`
 **Ký hiệu:** ✅ (Được phép) | ❌ (Từ chối) | ⚠️ (Có điều kiện)
 
-| Nhóm Tài Nguyên | Hành động | Coder | Viewer | Admin |
-|---|---|:---:|:---:|:---:|
-| **Authentication / Account** | Đăng ký tài khoản | ✅ | ✅ | ❌ |
-| | Đăng nhập / Đăng xuất | ✅ | ✅ | ✅ |
-| | Xem hồ sơ cá nhân của chính mình | ✅ | ✅ | ✅ |
-| | Cập nhật hồ sơ cá nhân của chính mình | ✅ | ✅ | ✅ |
-| **Code Editor / Session** | Tạo phiên code mới | ✅ | ❌ | ✅ |
-| | Chỉnh sửa code trong editor | ✅ | ❌ | ✅ |
-| | Chọn ngôn ngữ lập trình | ✅ | ❌ | ✅ |
-| | Xem code đang được viết realtime | ✅ | ✅ | ✅ |
-| | Tham gia session với quyền chỉ xem (qua link) | ❌ | ✅ | ✅ |
-| **Code Execution** | Chạy code (Run) | ✅ | ❌ | ✅ |
-| | Xem kết quả chạy code của chính mình | ✅ | ❌ | ✅ |
-| | Xem kết quả chạy code realtime đang chạy | ⚠️ | ✅ | ✅ |
-| | Dừng / hủy execution đang chạy | ⚠️ | ❌ | ✅ |
-| **History / Submissions** | Xem lịch sử run / submit của chính mình | ✅ | ❌ | ✅ |
-| | Xem chi tiết submission của chính mình | ✅ | ❌ | ✅ |
-| | Xem tất cả submissions của tất cả user | ❌ | ❌ | ✅ |
-| | Xóa submission | ❌ | ❌ | ✅ |
-| **Questions** | Xem danh sách câu hỏi | ✅ | ✅ | ✅ |
-| | Xem chi tiết câu hỏi | ✅ | ✅ | ✅ |
-| | Tạo câu hỏi mới | ❌ | ❌ | ✅ |
-| | Cập nhật câu hỏi | ❌ | ❌ | ✅ |
-| | Xóa câu hỏi | ❌ | ❌ | ✅ |
-| **Test Cases** | Xem test case mẫu (public/sample) | ✅ | ✅ | ✅ |
-| | Xem test case ẩn (hidden) | ❌ | ❌ | ✅ |
-| | Tạo / sửa / xóa test case | ❌ | ❌ | ✅ |
-| **Users & RBAC** | Xem danh sách user | ❌ | ❌ | ✅ |
-| | Khóa / mở khóa tài khoản | ❌ | ❌ | ✅ |
-| | Xóa tài khoản | ❌ | ❌ | ✅ |
-| | Phân quyền (gán role) | ❌ | ❌ | ✅ |
-| **System / Monitoring** | Xem dashboard hệ thống | ❌ | ❌ | ✅ |
-| | Xem tất cả logs / execution metrics | ❌ | ❌ | ✅ |
-| | Cấu hình giới hạn số lần `Run` theo user | ❌ | ❌ | ✅ |
+| Nhóm Tài Nguyên | Hành động | User | Admin |
+|---|---|:---:|:---:|
+| **Authentication / Account** | Đăng ký tài khoản | ✅ | ❌ |
+| | Đăng nhập / Đăng xuất | ✅ | ✅ |
+| | Xem hồ sơ cá nhân của chính mình | ✅ | ✅ |
+| | Cập nhật hồ sơ cá nhân của chính mình | ✅ | ✅ |
+| **Code Editor / Session** | Tạo phiên code mới | ✅ | ✅ |
+| | Chỉnh sửa code trong editor của session mình đang làm owner | ⚠️ | ✅ |
+| | Chọn ngôn ngữ lập trình trong session mình đang làm owner | ⚠️ | ✅ |
+| | Bật/tắt chia sẻ session | ⚠️ | ✅ |
+| | Tạo / rotate join code | ⚠️ | ✅ |
+| | Tham gia session bằng join code hoặc share link | ⚠️ | ✅ |
+| | Xem code đang được viết realtime | ✅ | ✅ |
+| | Xem danh sách participant trong session mình làm owner | ⚠️ | ✅ |
+| | Kick viewer khỏi session mình làm owner | ⚠️ | ✅ |
+| **Code Execution** | Chạy code (Run) trong session mình làm owner | ⚠️ | ✅ |
+| | Xem kết quả chạy code của chính mình | ✅ | ✅ |
+| | Xem kết quả chạy code realtime của session đang theo dõi | ⚠️ | ✅ |
+| | Dừng / hủy execution đang chạy trong session mình làm owner | ⚠️ | ✅ |
+| **History / Submissions** | Xem lịch sử run / submit của chính mình | ✅ | ✅ |
+| | Xem chi tiết submission của chính mình | ✅ | ✅ |
+| | Xem tất cả submissions của tất cả user | ❌ | ✅ |
+| | Xóa submission | ❌ | ✅ |
+| **Questions** | Xem danh sách câu hỏi | ✅ | ✅ |
+| | Xem chi tiết câu hỏi | ✅ | ✅ |
+| | Tạo câu hỏi mới | ❌ | ✅ |
+| | Cập nhật câu hỏi | ❌ | ✅ |
+| | Xóa câu hỏi | ❌ | ✅ |
+| **Test Cases** | Xem test case mẫu (public/sample) | ✅ | ✅ |
+| | Xem test case ẩn (hidden) | ❌ | ✅ |
+| | Tạo / sửa / xóa test case | ❌ | ✅ |
+| **Users & RBAC** | Xem danh sách user | ❌ | ✅ |
+| | Khóa / mở khóa tài khoản | ❌ | ✅ |
+| | Xóa tài khoản | ❌ | ✅ |
+| | Phân quyền (gán global role `ADMIN`/`USER`) | ❌ | ✅ |
+| **System / Monitoring** | Xem dashboard hệ thống | ❌ | ✅ |
+| | Xem tất cả logs / execution metrics | ❌ | ✅ |
+| | Cấu hình giới hạn số lần `Run` theo user | ❌ | ✅ |
 
 ---
 
 ## Chú thích
 
-**⚠️ Coder xem kết quả realtime:** Chỉ execution/session của chính mình
+**⚠️ User làm owner:** Quyền edit/run/submit/kick viewer chỉ áp dụng cho session mà user đang là `OWNER`
 
-**⚠️ Coder dừng execution:** Chỉ execution của chính mình
+**⚠️ User join session:** Chỉ được join khi owner đã bật chia sẻ và join code còn hiệu lực
 
-**⚠️ Viewer xem submission:** Chỉ kết quả realtime của session công khai đang theo dõi; không xem full history
+**⚠️ Viewer xem submission:** Chỉ kết quả realtime của session đang theo dõi; không xem full history của owner
 
 ---
 
@@ -183,7 +187,7 @@ graph TD
 | Decision | Rationale |
 |----------|-----------|
 | **Judge0 Selfhost** | Kiểm soát tài nguyên, isolation, cost-effective |
-| **WebSocket 1-way sync** | Chỉ cần Coder → Viewer, không cần conflict resolution |
+| **WebSocket 1-way sync** | Chỉ cần Owner → Viewer, không cần conflict resolution |
 | **JWT + Refresh Token** | Access token ngắn hạn giảm rủi ro lộ token, refresh token rotation hỗ trợ remember session và revoke |
 | **PostgreSQL** | ACID compliance, relation data, transaction support |
 | **Docker Compose** | Dễ deploy, tất cả trong 1 package (Judge0 + app + DB) |
@@ -236,8 +240,8 @@ graph TD
 ✅ User đăng ký, verify email, login, refresh session, chọn câu hỏi  
 ✅ Viết code, click Run/Submit, nhận `submission_id` ngay và theo dõi kết quả async qua WebSocket  
 ✅ History hiển thị được cả `RUN` và `SUBMIT`, filter theo type/status  
-✅ Realtime sync code Coder → Viewer realtime  
-✅ Session vẫn giữ được tối đa 5 phút khi coder mất kết nối và tiếp tục nếu reconnect đúng hạn  
+✅ Realtime sync code Owner → Viewer realtime  
+✅ Session vẫn giữ được tối đa 5 phút khi owner mất kết nối và tiếp tục nếu reconnect đúng hạn  
 ✅ Admin tạo test case, auto-grade submission  
 ✅ Isolation: Code user A không truy cập user B  
 ✅ 10 concurrent submissions không timeout  

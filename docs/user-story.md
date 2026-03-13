@@ -102,10 +102,9 @@ ACCEPTANCE CRITERIA:
 
 **ACCEPTANCE CRITERIA:**
 
-- [ ] Admin có thể gán 3 role:
+- [ ] Admin có thể gán 2 global role:
   - `ADMIN`: Quản lý toàn hệ thống (câu hỏi, người dùng, quyền)
-  - `CODER`: Viết code, run code, submit bài (ứng viên)
-  - `VIEWER`: Xem code realtime (interviewer) - read-only
+  - `USER`: Sử dụng editor, run/submit bài, tạo session và tham gia session
 
 - [ ] User thường không thể tự thay đổi role của mình
   - Endpoint: `PATCH /api/me/role` → `403 Forbidden`
@@ -117,12 +116,13 @@ ACCEPTANCE CRITERIA:
 
 - [ ] Permission matrix rõ ràng:
   - ADMIN: tất cả endpoints
-  - CODER: viết code, run, submit, xem lịch sử riêng
-  - CODER không được join session của coder khác
-  - VIEWER: xem code realtime (trong session), NOT edit
+  - USER: viết code, run, submit, xem lịch sử riêng
+  - Session permissions được quyết định bởi session role
+  - `OWNER`: edit/run/submit/share/kick viewer trong session của mình
+  - `VIEWER`: xem code realtime (trong session), NOT edit
 
 - [ ] Endpoint gán role: `PATCH /api/admin/users/{user_id}/role`
-  - Body: `{role: "CODER"}`
+  - Body: `{role: "USER"}`
   - Chỉ ADMIN mới có quyền
   - Trả về `200 OK` + user object updated
 
@@ -132,7 +132,7 @@ ACCEPTANCE CRITERIA:
 
 ### US04 - Web-Based Code Editor
 
-**AS A** Coder  
+**AS A** User  
 **I WANT** Viết code trực tiếp trên trình duyệt có syntax highlighting  
 **SO THAT** Tôi không cần cài IDE trên máy
 
@@ -172,7 +172,7 @@ ACCEPTANCE CRITERIA:
 
 ### US05 - Chọn Ngôn Ngữ Lập Trình
 
-**AS A** Coder  
+**AS A** User  
 **I WANT** Chọn ngôn ngữ từ dropdown  
 **SO THAT** Hệ thống compile & chạy code đúng environment
 
@@ -212,7 +212,7 @@ ACCEPTANCE CRITERIA:
 
 ### US04.1 - Input/Output Management
 
-**AS A** Coder  
+**AS A** User  
 **I WANT** Nhập input để kiểm tra code và xem output  
 **SO THAT** Tôi có thể debug chương trình
 
@@ -253,7 +253,7 @@ ACCEPTANCE CRITERIA:
 
 ### US06 - Chạy Code (Run)
 
-**AS A** Coder  
+**AS A** User  
 **I WANT** Nhấn "Run" để chạy code của mình  
 **SO THAT** Tôi có thể kiểm tra output trước khi submit
 
@@ -304,7 +304,7 @@ ACCEPTANCE CRITERIA:
 
 ### US07 - Hiển Thị Lỗi Khi Chạy Code
 
-**AS A** Coder  
+**AS A** User  
 **I WANT** Xem chi tiết lỗi compile/runtime  
 **SO THAT** Tôi có thể debug code
 
@@ -344,7 +344,7 @@ ACCEPTANCE CRITERIA:
 
 ### US12 - Tự Động Chấm Bài (Auto-Grading)
 
-**AS A** Coder  
+**AS A** User  
 **I WANT** Submit code và hệ thống tự động chấm  
 **SO THAT** Tôi biết lời giải đúng hay sai
 
@@ -415,7 +415,7 @@ ACCEPTANCE CRITERIA:
 
 ### US12.1 - Hiển Thị Kết Quả Chấm Chi Tiết
 
-**AS A** Coder  
+**AS A** User  
 **I WANT** Xem chi tiết kết quả chấm từng test case  
 **SO THAT** Tôi biết test nào pass/fail để debug
 
@@ -451,7 +451,7 @@ ACCEPTANCE CRITERIA:
 
 **AS A** Admin  
 **I WANT** Tạo câu hỏi với mô tả, mẫu input/output  
-**SO THAT** Coder có bài tập để giải
+**SO THAT** User có bài tập để giải
 
 **ACCEPTANCE CRITERIA:**
 
@@ -476,13 +476,13 @@ ACCEPTANCE CRITERIA:
 
 - [ ] Sample input/output:
   - Nhúng trực tiếp trong `description` dưới dạng markdown/code block
-  - Displayed to coder trước khi code
+  - Displayed to user trước khi code
   - NOT used for grading
 
 - [ ] Publishing:
   - Created with `is_published: false`
   - Admin phải explicitly publish
-  - Unpublished questions NOT visible to CODER/VIEWER
+  - Unpublished questions NOT visible to USER
 
 ---
 
@@ -499,7 +499,7 @@ ACCEPTANCE CRITERIA:
   - `input`: required, max 10,000 chars
   - `expected_output`: required, max 10,000 chars
   - `is_hidden`: boolean (default false)
-    - Public: visible để coder test
+    - Public: visible để user test
     - Hidden: dùng để chấm secret
   - `order`: integer, for display order
 
@@ -515,7 +515,7 @@ ACCEPTANCE CRITERIA:
   - Include is_hidden flag
 
 - [ ] Minimum requirement:
-  - ≥1 public test case để coder tìm hiểu
+  - ≥1 public test case để user tìm hiểu
   - Recommended: 3-5 hidden test cases để chấm
 
 - [ ] Admin có quyền sửa hoặc xóa test cases:
@@ -528,9 +528,9 @@ ACCEPTANCE CRITERIA:
 
 ### US14 - Tạo Coding Session
 
-**AS A** Coder  
-**I WANT** Tạo session coding để viewer xem tôi viết code  
-**SO THAT** Interviewer có thể theo dõi realtime
+**AS A** User  
+**I WANT** Tạo session coding và bật chia sẻ khi cần  
+**SO THAT** Người khác có thể theo dõi realtime bằng join code
 
 **ACCEPTANCE CRITERIA:**
 
@@ -538,50 +538,57 @@ ACCEPTANCE CRITERIA:
   - Button "Start Live Session" in editor
   - Click → generate unique session_id (UUID v4)
   - Create session record in DB
-  - Display session link: `app.com/session/{session_id}`
-  - Display copy-able URL + session ID
+  - Current user becomes session `OWNER`
+  - Display share controls in session header
 
 - [ ] Session structure:
   - `session_id`: UUID (primary key)
-  - `coder_id`: user_id (host)
+  - `owner_id`: user_id (host)
   - `question_id`: optional
   - `status`: "active" / "closed"
+  - `sharing_enabled`: boolean
+  - `join_code`: nullable string format `XXXX-YYYY`
+  - `join_code_expires_at`: optional timestamp
   - `created_at`, `ended_at`
 
 - [ ] Session lifecycle:
-  - Active = coder connected hoặc tạm mất kết nối nhưng chưa quá grace period
+  - Active = owner connected hoặc tạm mất kết nối nhưng chưa quá grace period
   - Multiple viewers can join
-  - Nếu coder reconnect trong vòng 5 phút sau disconnect → session tiếp tục, giữ nguyên code hiện tại
-  - Nếu coder không quay lại sau 5 phút → auto-close
-  - Coder có thể manually close bất kỳ lúc nào
+  - Nếu owner reconnect trong vòng 5 phút sau disconnect → session tiếp tục, giữ nguyên code hiện tại
+  - Nếu owner không quay lại sau 5 phút → auto-close
+  - Owner có thể manually close bất kỳ lúc nào
 
 - [ ] Sharing:
-  - Display session link prominently
-  - "Copy Link" button → copy to clipboard
-  - Share via email/chat
+  - Sharing mặc định = OFF khi mới tạo session
+  - Owner click "Open Sharing" → generate join code `XXXX-YYYY`
+  - Share link chứa join code, ví dụ `app.com/join/ABCD-EFGH`
+  - "Copy Link" button → copy share link to clipboard
+  - Owner có thể disable sharing hoặc rotate join code bất kỳ lúc nào
 
 ---
 
 ### US14.1 - Xem Code Realtime (Viewer Join)
 
-**AS A** Viewer (Interviewer)  
-**I WANT** Join session coding bằng session ID  
-**SO THAT** Tôi xem code của coder realtime
+**AS A** User  
+**I WANT** Join session coding bằng join code hoặc share link  
+**SO THAT** Tôi xem code của owner realtime
 
 **ACCEPTANCE CRITERIA:**
 
 - [ ] Join methods:
-  1. Direct link: `app.com/session/{session_id}` (auto-join)
-  2. Join dialog: paste session_id, click "Join"
+  1. Direct link: `app.com/join/{join_code}` (auto-fill / auto-join)
+  2. Join dialog: paste join code, click "Join"
 
 - [ ] Validation:
-  - Session exists: `404 Not Found` if invalid
+  - Join code exists: `404 Not Found` if invalid
   - Session active: `410 Gone` if closed
+  - Sharing enabled: `403 Forbidden` if owner has not opened sharing
   - User authenticated: `401 Unauthorized` if not logged in
 
 - [ ] Permission check:
-  - Session public-by-link cho user đã đăng nhập có role VIEWER hoặc ADMIN
-  - User có role CODER không được join session của coder khác
+  - Session chỉ join được khi owner đã mở sharing
+  - User không được join chính session mà mình đang là owner như một viewer
+  - Admin có thể join để moderate/debug nếu cần
   - Return: `403` if permission denied
 
 - [ ] Join response:
@@ -589,8 +596,9 @@ ACCEPTANCE CRITERIA:
     ```json
     {
       "session_id": "...",
-      "coder_id": "user123",
-      "coder_name": "Alice",
+      "owner_id": "user123",
+      "owner_name": "Alice",
+      "session_role": "VIEWER",
       "current_code": "...",
       "viewers": ["viewer1", "viewer2"],
       "websocket_url": "wss://api.com/session/550e8400.../ws"
@@ -598,27 +606,33 @@ ACCEPTANCE CRITERIA:
     ```
 
 - [ ] Error handling:
-  - Session not found: "❌ Session không tồn tại"
+  - Join code invalid: "❌ Mã tham gia không hợp lệ"
   - Session ended: "❌ Coding session đã kết thúc"
+  - Sharing off: "❌ Chủ session chưa mở chia sẻ"
 
-- [ ] Reconnect during coder grace period:
-  - Nếu viewer reconnect khi coder đang tạm disconnect nhưng session vẫn còn trong grace period 5 phút, viewer vẫn được join lại
-  - Join response phải trả snapshot code mới nhất + trạng thái coder `offline`
+- [ ] Reconnect during owner grace period:
+  - Nếu viewer reconnect khi owner đang tạm disconnect nhưng session vẫn còn trong grace period 5 phút, viewer vẫn được join lại
+  - Join response phải trả snapshot code mới nhất + trạng thái owner `offline`
   - Sau khi grace period hết hạn và session auto-close, request join mới phải trả `410 Gone`
+
+- [ ] Participant management:
+  - Owner thấy danh sách viewer đang active
+  - Owner có thể kick một viewer khỏi session
+  - Viewer bị kick nhận event `removed_from_session` và bị đóng quyền xem ngay
 
 ---
 
-### US13 - Đồng Bộ Code Realtime (Coder → Viewer)
+### US13 - Đồng Bộ Code Realtime (Owner → Viewer)
 
 **AS A** Viewer  
-**I WANT** Xem code của coder cập nhật realtime  
+**I WANT** Xem code của owner cập nhật realtime  
 **SO THAT** Tôi theo dõi quá trình viết code
 
 **ACCEPTANCE CRITERIA:**
 
 - [ ] Realtime sync architecture:
   - Tech: WebSocket (Socket.IO hoặc native WebSocket)
-  - Coder editor → onChange event → debounce 300ms → send server
+  - Owner editor → onChange event → debounce 300ms → send server
   - Server broadcast to all viewers in session
   - Viewer receives → update Monaco Editor (read-only)
   - Latency target: <1 second (P95)
@@ -635,8 +649,8 @@ ACCEPTANCE CRITERIA:
   - Current language visible
 
 - [ ] Connection indicators:
-  - Online: "🟢 Coder is online"
-  - Offline: "🔴 Coder is offline"
+  - Online: "🟢 Owner is online"
+  - Offline: "🔴 Owner is offline"
   - Connection quality: "📶 Good" / "📶 Unstable"
 
 - [ ] Handle disconnections:
@@ -649,13 +663,13 @@ ACCEPTANCE CRITERIA:
 ### US13.1 - Đồng Bộ Kết Quả Execution Realtime
 
 **AS A** Viewer  
-**I WANT** Thấy kết quả execution ngay lập tức khi coder chạy code  
+**I WANT** Thấy kết quả execution ngay lập tức khi owner chạy code  
 **SO THAT** Biết test case pass/fail realtime
 
 **ACCEPTANCE CRITERIA:**
 
 - [ ] Execution event broadcast:
-  - When coder click "Run" → broadcast: `code_executing`
+  - When owner click "Run" → broadcast: `code_executing`
   - Viewer sees: "Running..."
 
 - [ ] Result broadcast:
@@ -664,7 +678,7 @@ ACCEPTANCE CRITERIA:
   - Viewer sees: ✅ ACCEPTED, stdout, time, memory
 
 - [ ] Test case results (Submit):
-  - When coder submit → broadcast: `grading_progress`
+  - When owner submit → broadcast: `grading_progress`
   - Payload: `{submission_id, completed: 5, total: 8}`
   - Viewer sees: "Grading 5/8 test cases..."
 
@@ -685,7 +699,7 @@ ACCEPTANCE CRITERIA:
 
 ### US09 - Xem Lịch Sử Execution
 
-**AS A** Coder  
+**AS A** User  
 **I WANT** Xem lại các lần Run và Submit của mình  
 **SO THAT** Theo dõi quá trình làm bài và debug
 

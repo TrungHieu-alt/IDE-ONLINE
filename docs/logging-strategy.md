@@ -145,7 +145,9 @@ Theo dõi hoạt động của các coding session realtime.
 Bao gồm:
 
 - Tạo coding session
+- Owner mở chia sẻ / generate join code
 - Viewer tham gia session
+- Owner kick viewer khỏi session
 - Đồng bộ code realtime
 - Kết thúc session
 
@@ -157,7 +159,7 @@ Ví dụ:
   "service": "realtime-service",
   "event": "session_started",
   "session_id": "550e8400-e29b-41d4-a716-446655440000",
-  "coder_id": 123,
+  "owner_id": 123,
   "request_id": "req-126"
 }
 ```

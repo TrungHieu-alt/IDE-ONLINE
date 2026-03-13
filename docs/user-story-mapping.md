@@ -70,14 +70,14 @@ Authentication → Question Management → Coding → Execution → Submission �
 
 ## 5. User Journey Examples
 
-### Coder Journey
+### User Journey
 
 Register → Login → Open Question → Write Code → Run Code → Submit Solution → View Result → Check Submission History
 
 
 ### Viewer Journey
 
-Login → Join Coding Session → Watch Code Realtime → See Execution Results
+Login → Enter Join Code / Open Share Link → Join Coding Session → Watch Code Realtime → See Execution Results
 
 
 ### Admin Journey
