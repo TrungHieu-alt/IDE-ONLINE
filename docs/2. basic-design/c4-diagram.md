@@ -30,7 +30,7 @@ Mức này mô tả các tác nhân chính tương tác với hệ thống gồm
 - **Judge0**: hệ thống thực thi code sandbox bên ngoài
 - **Email Service**: hệ thống ngoài dùng để gửi email verify account và các email hệ thống
 
-![System Context](../assets/Context%20Diagram%20%28Current%29.svg)
+![System Context](../../assets/Context%20Diagram%20%28Current%29.svg)
 
 ---
 
@@ -45,7 +45,7 @@ Mức container thể hiện các khối chính trong hệ thống:
 - **Judge0**: thực thi source code trong môi trường sandbox
 - **Email Service**: dịch vụ gửi email verification/notification từ backend
 
-![Container Diagram](../assets/Online%20Code%20Editor%20App%20Diagram%20%28Current%29.svg)
+![Container Diagram](../../assets/Online%20Code%20Editor%20App%20Diagram%20%28Current%29.svg)
 
 ---
 
@@ -58,7 +58,7 @@ Mức này tập trung vào các thành phần chính của frontend:
 - **API Client**: gọi REST API tới backend
 - **Other Pages**: các màn hình khác như login, dashboard, history
 
-![Frontend Component Diagram](../assets/Frontend%20Component%20Diagram%20%28Current%29.svg)
+![Frontend Component Diagram](../../assets/Frontend%20Component%20Diagram%20%28Current%29.svg)
 
 ---
 
@@ -74,7 +74,7 @@ Mức này mô tả các nhóm thành phần backend phục vụ:
 - integration với PostgreSQL, Frontend và Judge0
 - integration với Email Service cho verification flow
 
-![Backend Component Diagram](../assets/Backend%20Component%20Diagram%20%28Current%29.svg)
+![Backend Component Diagram](../../assets/Backend%20Component%20Diagram%20%28Current%29.svg)
 
 ---
 
