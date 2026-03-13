@@ -564,14 +564,15 @@ ACCEPTANCE CRITERIA:
   - Share link chứa join code, ví dụ `app.com/join/ABCD-EFGH`
   - "Copy Link" button → copy share link to clipboard
   - Owner có thể disable sharing hoặc rotate join code bất kỳ lúc nào
+  - Khi owner tắt sharing → tất cả viewer đang xem bị disconnect ngay
 
 ---
 
 ### US14.1 - Xem Code Realtime (Viewer Join)
 
 **AS A** User  
-**I WANT** Join session coding bằng join code hoặc share link  
-**SO THAT** Tôi xem code của owner realtime
+**I WANT** Request join session coding bằng join code hoặc share link  
+**SO THAT** Tôi có thể được owner approve để xem code realtime
 
 **ACCEPTANCE CRITERIA:**
 
@@ -591,19 +592,29 @@ ACCEPTANCE CRITERIA:
   - Admin có thể join để moderate/debug nếu cần
   - Return: `403` if permission denied
 
-- [ ] Join response:
-  - `200 OK` + session data:
+- [ ] Join request flow:
+  - Submit join code → tạo request với trạng thái `PENDING`
+  - Owner thấy request mới trong danh sách chờ duyệt
+  - Owner có thể `Approve` hoặc `Reject`
+  - Chỉ sau khi được `Approve`, viewer mới attach được vào WebSocket/session realtime
+  - Nếu bị `Reject`, user có thể gửi request lại nếu sharing vẫn đang mở
+
+- [ ] Rate limit:
+  - Tối đa 5 join request / 10 phút / user / session
+  - Nếu vượt limit → `429 Too Many Requests`
+  - Không được tạo request trùng khi đã có một request `PENDING`
+
+- [ ] Join request response:
+  - `202 Accepted` + request data:
     ```json
     {
+      "request_id": "...",
       "session_id": "...",
-      "owner_id": "user123",
-      "owner_name": "Alice",
-      "session_role": "VIEWER",
-      "current_code": "...",
-      "viewers": ["viewer1", "viewer2"],
-      "websocket_url": "wss://api.com/session/550e8400.../ws"
+      "status": "PENDING",
+      "requested_at": "..."
     }
     ```
+  - Sau khi được approve, viewer attach vào session và nhận snapshot + `websocket_url`
 
 - [ ] Error handling:
   - Join code invalid: "❌ Mã tham gia không hợp lệ"
@@ -611,14 +622,15 @@ ACCEPTANCE CRITERIA:
   - Sharing off: "❌ Chủ session chưa mở chia sẻ"
 
 - [ ] Reconnect during owner grace period:
-  - Nếu viewer reconnect khi owner đang tạm disconnect nhưng session vẫn còn trong grace period 5 phút, viewer vẫn được join lại
-  - Join response phải trả snapshot code mới nhất + trạng thái owner `offline`
+  - Nếu viewer đã được approve và owner đang tạm disconnect nhưng session vẫn còn trong grace period 5 phút, viewer vẫn được join lại
+  - Attach/join response phải trả snapshot code mới nhất + trạng thái owner `offline`
   - Sau khi grace period hết hạn và session auto-close, request join mới phải trả `410 Gone`
 
 - [ ] Participant management:
   - Owner thấy danh sách viewer đang active
   - Owner có thể kick một viewer khỏi session
   - Viewer bị kick nhận event `removed_from_session` và bị đóng quyền xem ngay
+  - Viewer bị kick không bị block vĩnh viễn; họ có thể gửi request lại nếu sharing còn mở
 
 ---
 

@@ -82,7 +82,7 @@ Platform cho phép người dùng viết code online với nhiều ngôn ngữ l
 | **NFR6** | Security | Sandbox chặn fork/network call, JWT auth, HTTPS |
 | **NFR7** | Availability | Judge0 down → hiển thị error rõ ràng, auto-retry, không crash system |
 | **NFR8** | Database ACID | PostgreSQL transactions, data consistency |
-| **NFR9** | Session Continuity | Realtime session giữ trạng thái tối đa 5 phút sau khi session owner disconnect; nếu owner reconnect trước timeout thì session tiếp tục, quá 5 phút thì auto-close. **Implementation note:** Backend phải có một scheduled job chạy mỗi 1 phút để query các session có `status = ACTIVE`, `last_activity_at < NOW() - 5 minutes`, và owner hiện không có WebSocket connection. Các session này bị set `status = CLOSED`, `ended_at = NOW()`, `sharing_enabled = false`, và broadcast event `session_closed` với `reason = "idle_timeout"` đến tất cả viewer đang kết nối. |
+| **NFR9** | Session Continuity | Realtime session giữ trạng thái tối đa 5 phút sau khi session owner disconnect; nếu owner reconnect trước timeout thì session tiếp tục, quá 5 phút thì auto-close. **Implementation note:** Backend phải có một scheduled job chạy mỗi 1 phút để query các session có `status = ACTIVE`, `last_activity_at < NOW() - 5 minutes`, và owner hiện không có WebSocket connection. Các session này bị set `status = CLOSED`, `ended_at = NOW()`, `sharing_enabled = false`, và broadcast event `session_closed` với `reason = "idle_timeout"` đến tất cả viewer đang kết nối. Nếu owner chủ động tắt sharing thì backend phải disconnect toàn bộ viewer ngay và chặn request join mới cho đến khi sharing được bật lại. |
 
 ---
 
@@ -136,6 +136,7 @@ Platform cho phép người dùng viết code online với nhiều ngôn ngữ l
 **⚠️ User làm owner:** Quyền edit/run/submit/kick viewer chỉ áp dụng cho session mà user đang là `OWNER`
 
 **⚠️ User join session:** Chỉ được join khi owner đã bật chia sẻ và join code còn hiệu lực
+Viewer phải được owner/admin approve trước khi attach vào realtime session; request join phải bị rate limit
 
 **⚠️ Viewer xem submission:** Chỉ kết quả realtime của session đang theo dõi; không xem full history của owner
 

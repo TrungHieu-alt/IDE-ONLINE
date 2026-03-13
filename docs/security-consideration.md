@@ -245,6 +245,26 @@ Khi nhận WebSocket event `code_changed`:
 
 > Việc drop silently (không báo lỗi) tránh attacker biết được họ đang bị detect.
 
+### 4.6 Join Approval & Rate Limiting
+
+Join code chỉ là bước để tạo **join request**, không phải cấp quyền truy cập trực tiếp.
+
+Luồng an toàn:
+1. Viewer gửi join code hợp lệ → backend tạo `session_join_request` với `status = PENDING`
+2. Owner/Admin review request và `APPROVE` hoặc `REJECT`
+3. Chỉ request đã `APPROVED` mới được attach vào WebSocket session
+4. Nếu owner đóng sharing → tất cả viewer đang active bị disconnect ngay và request join mới bị từ chối
+
+**Rate limiting bắt buộc:**
+- Max 5 join requests / 10 phút / user / session
+- Max 20 join requests / 10 phút / session (để tránh spam vào owner approval queue)
+- Request đang `PENDING` không được tạo trùng
+
+**Kick behavior:**
+- Kick chỉ disconnect viewer hiện tại
+- Không tạo blocked list lâu dài
+- Viewer có thể request lại nếu sharing vẫn mở và chưa vượt rate limit
+
 ---
 
 ## 5. Code Execution Sandbox
@@ -479,13 +499,13 @@ Client event received
         │
    code_changed? ──► [Verify sender là owner của session]
         │
-   join_session? ──► [Verify session tồn tại, còn ACTIVE, sharing đang bật, join code hợp lệ]
+   join_session? ──► [Verify session tồn tại, còn ACTIVE, và viewer đã được approve]
 ```
 
 ### 9.3 Event Validation
 
 - Không trust `session_id` trong event payload — lấy từ authenticated WS session context
-- Với `join_session`, chỉ cho phép user đã authenticated; nếu là owner đang attach vào session của mình thì không cần join code, còn viewer phải có join code hợp lệ
+- Với `join_session`, chỉ cho phép user đã authenticated; nếu là owner đang attach vào session của mình thì không cần approval step, còn viewer phải có join request đã được approve và chưa bị revoke bởi việc đóng sharing
 - Validate `version` là integer dương
 - Validate `code_content` size ≤ 1MB
 - Không eval hoặc execute bất kỳ data nào từ WebSocket event

@@ -1420,20 +1420,22 @@ POST /api/sessions/:session_id/sharing/close
   "data": {
     "session_id": "ses-uuid-...",
     "sharing_enabled": false,
-    "join_code": null
+    "join_code": null,
+    "disconnected_viewer_count": 3
   }
 }
 ```
 
 **Notes:**
 - Blocks new joins immediately
-- Existing viewers may either remain until owner closes/kicks them, or be disconnected immediately depending on final product policy; MVP should choose one and document it in implementation
+- Disconnects all currently connected viewers immediately
+- Existing pending join requests remain in history, but no new requests may be created until sharing is opened again
 
 **User Story:** US14
 
 ---
 
-### 9.4 Join Session by Code
+### 9.4 Request to Join Session by Code
 
 🔒 **All Roles**
 
@@ -1453,34 +1455,19 @@ POST /api/sessions/join
 }
 ```
 
-**Response:** `200 OK`
+**Response:** `202 Accepted`
 ```json
 {
   "success": true,
   "data": {
+    "request_id": "req-join-uuid-...",
     "session_id": "ses-uuid-...",
     "owner": {
       "user_id": "550e8400-...",
       "display_name": "Alice"
     },
-    "question": {
-      "question_id": "a1b2c3d4-...",
-      "title": "Two Sum"
-    },
-    "session_role": "VIEWER",
-    "status": "ACTIVE",
-    "current_code": "print('hello')",
-    "current_language_id": 71,
-    "current_version": 42,
-    "viewers": [
-      {
-        "user_id": "viewer-uuid-...",
-        "display_name": "Bob",
-        "joined_at": "2025-03-10T12:05:00Z"
-      }
-    ],
-    "websocket_url": "wss://api.example.com/ws/session/ses-uuid-...",
-    "created_at": "2025-03-10T12:00:00Z"
+    "status": "PENDING",
+    "requested_at": "2025-03-10T12:05:00Z"
   }
 }
 ```
@@ -1489,23 +1476,125 @@ POST /api/sessions/join
 
 | Status | Code | When |
 |--------|------|------|
-| 403 | `FORBIDDEN` | Sharing disabled, user is already the owner, or user is blocked from joining |
+| 403 | `FORBIDDEN` | Sharing disabled or user is already the owner |
 | 404 | `JOIN_CODE_NOT_FOUND` | Join code doesn't exist |
 | 410 | `SESSION_CLOSED` | Session has ended |
 | 410 | `JOIN_CODE_EXPIRED` | Join code expired |
+| 409 | `JOIN_REQUEST_ALREADY_PENDING` | User already has an unresolved pending request for this session |
+| 429 | `JOIN_REQUEST_RATE_LIMITED` | User exceeded join-request rate limit for this session |
 
 **Notes:**
-- `current_code` provides the latest snapshot for late-joining viewers
-- Viewer connects to `websocket_url` after this call
-- Session is joinable only when owner has opened sharing and the join code is still valid
-- Authenticated `USER` or `ADMIN` may join as `VIEWER`
+- Creates a join request instead of granting access immediately
+- Session is requestable only when owner has opened sharing and the join code is still valid
+- Authenticated `USER` or `ADMIN` may request to join as `VIEWER`
+- Rate limit recommendation: max `5` join requests / 10 minutes / user / session
 - The share link just pre-fills the same `join_code`
 
 **User Story:** US14.1
 
 ---
 
-### 9.5 List Session Participants
+### 9.5 List Pending Join Requests
+
+🔒 **Owner** (own session), **Admin**
+
+```
+GET /api/sessions/:session_id/join-requests
+```
+
+**Response:** `200 OK`
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "request_id": "req-join-uuid-...",
+      "user": {
+        "user_id": "viewer-uuid-...",
+        "display_name": "Bob"
+      },
+      "status": "PENDING",
+      "requested_at": "2025-03-10T12:05:00Z"
+    }
+  ]
+}
+```
+
+**Notes:**
+- By default returns only `PENDING` requests; optional query filtering may be added later for history
+
+**User Story:** US14.1
+
+---
+
+### 9.6 Approve Join Request
+
+🔒 **Owner** (own session), **Admin**
+
+```
+POST /api/sessions/:session_id/join-requests/:request_id/approve
+```
+
+**Response:** `200 OK`
+```json
+{
+  "success": true,
+  "data": {
+    "request_id": "req-join-uuid-...",
+    "session_id": "ses-uuid-...",
+    "user_id": "viewer-uuid-...",
+    "status": "APPROVED",
+    "websocket_url": "wss://api.example.com/ws/session/ses-uuid-...",
+    "approved_at": "2025-03-10T12:06:00Z"
+  }
+}
+```
+
+**Errors:**
+
+| Status | Code | When |
+|--------|------|------|
+| 404 | `JOIN_REQUEST_NOT_FOUND` | Request does not exist for this session |
+| 409 | `JOIN_REQUEST_ALREADY_RESOLVED` | Request already approved/rejected |
+
+**Notes:**
+- Approval authorizes the viewer to attach via WebSocket and receive the initial session snapshot
+- Frontend should notify the requester in real time if they are online
+
+**User Story:** US14.1
+
+---
+
+### 9.7 Reject Join Request
+
+🔒 **Owner** (own session), **Admin**
+
+```
+POST /api/sessions/:session_id/join-requests/:request_id/reject
+```
+
+**Response:** `200 OK`
+```json
+{
+  "success": true,
+  "data": {
+    "request_id": "req-join-uuid-...",
+    "session_id": "ses-uuid-...",
+    "user_id": "viewer-uuid-...",
+    "status": "REJECTED",
+    "rejected_at": "2025-03-10T12:06:00Z"
+  }
+}
+```
+
+**Notes:**
+- Rejection does not permanently block the viewer; they may submit a new request later if sharing is still open and rate limits allow
+
+**User Story:** US14.1
+
+---
+
+### 9.8 List Session Participants
 
 🔒 **Owner** (own session), **Admin**
 
@@ -1538,7 +1627,7 @@ GET /api/sessions/:session_id/participants
 
 ---
 
-### 9.6 Kick Session Participant
+### 9.9 Kick Session Participant
 
 🔒 **Owner** (own session), **Admin**
 
@@ -1560,13 +1649,15 @@ POST /api/sessions/:session_id/participants/:user_id/kick
 
 **Notes:**
 - Owner cannot kick themselves through this endpoint
+- Kicking removes the viewer from active participants immediately
+- Kicked viewers are not persistently blocked; they may submit a new join request again if sharing is still open and rate limits allow
 - Server emits `removed_from_session` to the target viewer and updates participant list for the owner
 
 **User Story:** US14.1
 
 ---
 
-### 9.7 Close Session
+### 9.10 Close Session
 
 🔒 **Owner** (own session), **Admin**
 
@@ -1611,14 +1702,13 @@ This same WebSocket connection is also used to stream execution and grading even
 
 #### `join_session`
 
-Sent by viewer after WebSocket connection established.
+Sent after a participant has been authorized to attach to the live session.
 
 ```json
 {
   "event": "join_session",
   "data": {
-    "session_id": "ses-uuid-...",
-    "join_code": "ABCD-EFGH"
+    "session_id": "ses-uuid-..."
   }
 }
 ```
@@ -1626,9 +1716,9 @@ Sent by viewer after WebSocket connection established.
 **Server responds with:** `viewer_joined` broadcast + current code snapshot
 
 **Authorization rules:**
-- Authenticated `USER` and `ADMIN` may join as `VIEWER` when sharing is enabled and the join code is valid
-- Session owner may attach to their own hosted session without a join code
-- If user was kicked or sharing is disabled, server rejects the join
+- Session owner may attach to their own hosted session directly
+- Viewer may attach only after their join request was approved and the session is still active
+- If sharing was closed after approval but before socket attach, the server rejects the join because all viewer access is revoked
 
 **If forbidden:** server emits an error event and closes/refuses the join for that socket.
 
@@ -1822,7 +1912,7 @@ Broadcast when all test cases finish.
 
 #### `removed_from_session`
 
-Broadcast to a viewer when owner/admin removes them from the session.
+Broadcast to a viewer when owner/admin removes them from the session or closes sharing.
 
 ```json
 {
@@ -1834,6 +1924,8 @@ Broadcast to a viewer when owner/admin removes them from the session.
   }
 }
 ```
+
+`reason` values: `kicked_by_owner` | `sharing_closed` | `admin_removed`
 
 ---
 

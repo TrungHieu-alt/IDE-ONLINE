@@ -19,6 +19,7 @@ erDiagram
     submissions ||--o{ execution_results : "contains"
     test_cases ||--o{ execution_results : "evaluated in"
     sessions ||--o{ session_participants : "has"
+    sessions ||--o{ session_join_requests : "receives"
     sessions ||--o{ session_events : "buffers"
     sessions }o--|| users : "hosted by"
     sessions }o--o| questions : "optionally linked to"
@@ -132,7 +133,16 @@ erDiagram
         enum session_role "OWNER | VIEWER"
         timestamp joined_at "NOT NULL"
         timestamp left_at "nullable"
-        timestamp kicked_at "nullable"
+    }
+
+    session_join_requests {
+        uuid id PK
+        uuid session_id FK "→ sessions.id, NOT NULL"
+        uuid user_id FK "→ users.id, NOT NULL, ON DELETE RESTRICT"
+        enum status "PENDING | APPROVED | REJECTED"
+        uuid reviewed_by FK "→ users.id, nullable, ON DELETE RESTRICT"
+        timestamp requested_at "NOT NULL"
+        timestamp reviewed_at "nullable"
     }
 
     refresh_tokens {
@@ -334,7 +344,7 @@ Individual execution results. One row per run against custom input or per test c
 
 ### 2.6 `sessions`
 
-Realtime coding sessions. Owner creates, Viewers join using an owner-issued join code. Stores latest code snapshot for late-joining viewers and tracks reconnect/auto-close lifecycle.
+Realtime coding sessions. Owner creates, viewers request access using an owner-issued join code, and owner approves requests. Stores latest code snapshot for approved viewers and tracks reconnect/auto-close lifecycle.
 
 | Column | Type | Constraints | Description |
 |--------|------|-------------|-------------|
@@ -360,12 +370,15 @@ Realtime coding sessions. Owner creates, Viewers join using an owner-issued join
 **Lifecycle:**
 1. User creates → becomes `OWNER`, `status = ACTIVE`, `sharing_enabled = false`
 2. Owner opens sharing → backend generates `join_code`
-3. Viewers join via code/share link
-4. `last_activity_at` tracked from realtime/editor activity
-5. Owner disconnects → session remains recoverable for 5 minutes
-6. If owner reconnects within 5 minutes → continue same session
-7. If not → scheduled job (runs every 60s) detects stale session, sets `status = CLOSED`, sets `ended_at = NOW()`, disables sharing, and broadcasts `session_closed` to remaining viewers
-8. Owner clicks "End Session" → `status = CLOSED`, `sharing_enabled = false`, `join_code = NULL`, `ended_at = NOW()`
+3. Viewers submit join requests via code/share link while sharing is open
+4. Owner approves/rejects requests
+5. `last_activity_at` tracked from realtime/editor activity
+6. Owner disconnects → session remains recoverable for 5 minutes
+7. If owner reconnects within 5 minutes → continue same session
+8. If not → scheduled job (runs every 60s) detects stale session, sets `status = CLOSED`, sets `ended_at = NOW()`, disables sharing, and broadcasts `session_closed` to remaining viewers
+9. Owner clicks "End Session" → `status = CLOSED`, `sharing_enabled = false`, `join_code = NULL`, `ended_at = NOW()`
+10. Owner closes sharing → blocks new join requests and disconnects all active viewers immediately
+11. Owner/Admin kicks a viewer → viewer is disconnected immediately; they may submit a new join request later if sharing is reopened/open and rate limits allow
 
 **Auto-close worker rule:** Chỉ đóng session khi đồng thời thỏa 2 điều kiện: `last_activity_at < NOW() - 5 minutes` và owner không còn active WebSocket connection.
 
@@ -400,7 +413,7 @@ Short-lived ordered event buffer for reconnect catch-up. Clients reconnect with 
 
 ### 2.8 `session_participants`
 
-Join table tracking which users are/were in a session and their session-scoped role. Supports active participant list, viewer history, and owner kick actions.
+Join table tracking which users are/were actively attached to a session and their session-scoped role. Supports active participant list and viewer history.
 
 | Column | Type | Constraints | Description |
 |--------|------|-------------|-------------|
@@ -409,8 +422,7 @@ Join table tracking which users are/were in a session and their session-scoped r
 | `user_id` | UUID | FK → users.id, NOT NULL, ON DELETE RESTRICT | Participant |
 | `session_role` | ENUM | NOT NULL | `OWNER` \| `VIEWER` |
 | `joined_at` | TIMESTAMP | NOT NULL | When participant joined |
-| `left_at` | TIMESTAMP | nullable | When participant left (NULL = still connected) |
-| `kicked_at` | TIMESTAMP | nullable | When owner/admin forcibly removed the participant |
+| `left_at` | TIMESTAMP | nullable | When participant left or was disconnected (NULL = still connected) |
 
 **Indexes:**
 - `UNIQUE INDEX idx_session_participant_active ON session_participants(session_id, user_id) WHERE left_at IS NULL` — one active join per participant
@@ -421,7 +433,30 @@ Join table tracking which users are/were in a session and their session-scoped r
 
 ---
 
-### 2.9 `refresh_tokens`
+### 2.9 `session_join_requests`
+
+Tracks access requests submitted via join code before a viewer is allowed into the live session. Requests are reviewed by owner/admin and are rate-limited per user/session.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | UUID | PK | Primary key |
+| `session_id` | UUID | FK → sessions.id, NOT NULL, ON DELETE CASCADE | Session |
+| `user_id` | UUID | FK → users.id, NOT NULL, ON DELETE RESTRICT | Requesting viewer |
+| `status` | ENUM | NOT NULL, default `PENDING` | `PENDING` \| `APPROVED` \| `REJECTED` |
+| `reviewed_by` | UUID | FK → users.id, nullable, ON DELETE RESTRICT | Owner/Admin who reviewed the request |
+| `requested_at` | TIMESTAMP | NOT NULL | When request was created |
+| `reviewed_at` | TIMESTAMP | nullable | When request was approved/rejected |
+
+**Indexes:**
+- `INDEX idx_session_join_requests_session ON session_join_requests(session_id, requested_at DESC)`
+- `INDEX idx_session_join_requests_user ON session_join_requests(user_id, requested_at DESC)`
+- `UNIQUE INDEX idx_session_join_request_pending ON session_join_requests(session_id, user_id) WHERE status = 'PENDING'` — one active pending request per user/session
+
+**User Story Mapping:** US14.1
+
+---
+
+### 2.10 `refresh_tokens`
 
 Stores hashed rotating refresh tokens used for remember-session flows.
 
